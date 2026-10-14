@@ -144,6 +144,21 @@
 #define ALT111_DEFAULT_SMALL_SAFE_Y 87
 #define ALT111_DEFAULT_SMALL_SAFE_W 400
 #define ALT111_DEFAULT_SMALL_SAFE_H 270   /* same bottom edge as the wide view */
+/*
+ * Third ViewArea: VC "sport" layout with the small map. Stock moves the map planes
+ * (and ClusterLayerController moves plane 99 with them) by the layout's small-stage
+ * offset (-476,0 on B9 Sport), so the visible window is a different part of the
+ * canvas than in classic. The commercial MHI2Q package's third table entry is
+ * 114,88,350x296 in screen pixels of the window; with plane 99 moved by -476 the
+ * same spot is canvas x 114+476 = 590 (114 on the moved plane put the puck left
+ * of the cluster on a Q7). Opt-in: advertised only while
+ * /mnt/app/root/mibr-carplay111-viewareas.sport exists. Override with
+ * /mnt/app/root/mibr-carplay111-safearea-sport.conf.
+ */
+#define ALT111_DEFAULT_SPORT_SAFE_X 590
+#define ALT111_DEFAULT_SPORT_SAFE_Y 88
+#define ALT111_DEFAULT_SPORT_SAFE_W 350
+#define ALT111_DEFAULT_SPORT_SAFE_H 296
 #else
 #define ALT111_TARGET_NAME "mu1440"
 #define ALT111_DEFAULT_PORT 6031
@@ -747,20 +762,29 @@ static int read_trimmed_value(const char *path, char *out, size_t cap)
 }
 
 static const char *g_safearea_small_config_path = "/mnt/app/root/mibr-carplay111-safearea-small.conf";
+static const char *g_safearea_sport_config_path = "/mnt/app/root/mibr-carplay111-safearea-sport.conf";
 
-/* view 0 = full/wide VC map, view 1 = classic small map window. */
+/* view 0 = full/wide VC map, view 1 = classic small map window,
+ * view 2 = sport small map window. */
 static void load_safearea_config(int view, int *x, int *y, int *w, int *h)
 {
     char b[192];
     int fd, n;
     int tx=0, ty=0, tw=g_width, th=g_height;
-    const char *path = view ? g_safearea_small_config_path : g_safearea_config_path;
+    const char *path = view == 2 ? g_safearea_sport_config_path
+                     : view ? g_safearea_small_config_path : g_safearea_config_path;
 
     if(!x||!y||!w||!h) return;
     *x=0; *y=0; *w=g_width; *h=g_height;
 #ifdef ALT111_DEFAULT_SAFE_W
     /* Built-in default only while the canvas is the one it was measured on. */
     if(g_width==ALT111_DEFAULT_WIDTH && g_height==ALT111_DEFAULT_HEIGHT){
+#ifdef ALT111_DEFAULT_SPORT_SAFE_W
+        if(view==2){
+            *x=ALT111_DEFAULT_SPORT_SAFE_X; *y=ALT111_DEFAULT_SPORT_SAFE_Y;
+            *w=ALT111_DEFAULT_SPORT_SAFE_W; *h=ALT111_DEFAULT_SPORT_SAFE_H;
+        }else
+#endif
         if(view){
             *x=ALT111_DEFAULT_SMALL_SAFE_X; *y=ALT111_DEFAULT_SMALL_SAFE_Y;
             *w=ALT111_DEFAULT_SMALL_SAFE_W; *h=ALT111_DEFAULT_SMALL_SAFE_H;
@@ -2349,18 +2373,30 @@ done:
  * command_update_view). A smaller view-1 rect was tried (log set 015) and is
  * inert, as joeyQuery/MHI2-altScreen also found. The marker below falls back to
  * the single view.
+ * View 2 = sport small map window (CMD_ALT_ZONE mode 1), opt-in: advertised only
+ * while the sport marker exists; otherwise sport uses view 1 (classic) as before.
  */
 static const char *g_single_view_marker = "/mnt/app/root/mibr-carplay111-viewareas.single";
+static const char *g_sport_view_marker = "/mnt/app/root/mibr-carplay111-viewareas.sport";
 static int g_view_count = 1;
 static volatile int g_desired_view;
 
 static int configured_view_count(void)
 {
 #ifdef ALT111_DEFAULT_SMALL_SAFE_W
-    return access(g_single_view_marker,F_OK)==0 ? 1 : 2;
+    if(access(g_single_view_marker,F_OK)==0) return 1;
+#ifdef ALT111_DEFAULT_SPORT_SAFE_W
+    if(access(g_sport_view_marker,F_OK)==0) return 3;
+#endif
+    return 2;
 #else
     return 1;
 #endif
+}
+
+static const char *view_name(int v)
+{
+    return v == 2 ? "sport" : v ? "classic" : "wide";
 }
 
 static void add_reference_viewarea(CFMutableDictionaryRef alt)
@@ -2397,7 +2433,7 @@ static void add_reference_viewarea(CFMutableDictionaryRef alt)
         p_CFArrayAppendValue(areas,view);
         p_CFRelease(safe);
         p_CFRelease(view);
-        logf_u2("GEN2 ViewArea[%d] %s area=%dx%d@%d,%d safe=%dx%d@%d,%d",v,v?"classic":"wide",
+        logf_u2("GEN2 ViewArea[%d] %s area=%dx%d@%d,%d safe=%dx%d@%d,%d",v,view_name(v),
                 area_w,area_h,area_x,area_y,safe_w,safe_h,safe_x,safe_y);
     }
     k=s_cf("viewAreas");
@@ -2979,7 +3015,7 @@ int altscreen111_view_area(int view)
     }
     pthread_cond_broadcast(&g2_core_cv);
     pthread_mutex_unlock(&g2_core_lock);
-    logf_u2("gen2 view area -> %d (%s) %s rc=%d",view,view?"classic":"wide",
+    logf_u2("gen2 view area -> %d (%s) %s rc=%d",view,view_name(view),
             active?"updateViewArea queued":"for the next session",rc);
     return rc;
 }
@@ -4183,6 +4219,7 @@ static int gen2_configure_profile(void)
     g_view_count=configured_view_count();
     g2_profile.view_count=(unsigned)g_view_count;
     if(g_view_count>1) g2_profile.views[1]=g2_profile.views[0];
+    if(g_view_count>2) g2_profile.views[2]=g2_profile.views[0];
     if(alt111_profile_validate(&g2_profile)!=ALT111_OK){
         logf_u2("gen2 runtime profile validation failed");
         return -1;

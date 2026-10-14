@@ -321,7 +321,9 @@ public final class ClusterLayerController {
             /* Android Auto: the gal hook reads the layout from a file (no bus peer). */
             com.luka.carplay.aa.AaClusterView.publish(popup, geometry.layoutName);
         } else {
-            sendAltViewArea(videoActive, popup);
+            /* Sport small map: stock moves the map planes (and plane 99) by the layout's
+             * small-stage offset, so the visible window needs its own SafeArea. */
+            sendAltViewArea(videoActive, popup, smallStage && geometry.smallStageDX != 0);
         }
         try {
             /* Applied on every path below, including the early returns. */
@@ -382,14 +384,16 @@ public final class ClusterLayerController {
      *  the puck inside the visible map (ViewArea 0 = wide map, 1 = classic small window
      *  between the dials). VC FctID 54 drives {@code popup}: large map = wide. Serialized
      *  by APPLY_LOCK; re-sent for every new video session. */
-    private static void sendAltViewArea(boolean videoActive, boolean popup) {
+    private static void sendAltViewArea(boolean videoActive, boolean popup, boolean sportSmall) {
         if (!videoActive) { lastZoneSent = -1; return; }
-        int zone = popup ? 0 : 2;   /* CMD_ALT_ZONE mode: 0=full, 2=classic */
+        /* CMD_ALT_ZONE mode: 0=full, 1=sport, 2=classic */
+        int zone = sportSmall ? 1 : (popup ? 0 : 2);
         if (zone == lastZoneSent) return;
         boolean sent = com.luka.carplay.bus.CarplayBus.getInstance().sendBinary(
             com.luka.carplay.bus.CarplayBus.CMD_ALT_ZONE, new byte[]{(byte) zone, 0, 0});
         if (sent) lastZoneSent = zone;
-        Log.i("ClusterLayers", "AltScreen view area -> " + (popup ? "wide (0)" : "classic (1)")
+        Log.i("ClusterLayers", "AltScreen view area -> "
+            + (zone == 1 ? "sport (2)" : zone == 0 ? "wide (0)" : "classic (1)")
             + (sent ? "" : " (bus send dropped, retried on the next change)"));
     }
 

@@ -60,13 +60,15 @@ static void on_alt_zoom(uint16_t type, uint8_t flags, const uint8_t* payload,
 }
 
 /* CMD_ALT_ZONE [u8 mode 0=full/1=sport/2=classic][u16 LE ms]: the VC layout.
- * full = wide map -> ViewArea 0; sport/classic small map window -> ViewArea 1. */
+ * full = wide map -> ViewArea 0; classic small map window -> ViewArea 1;
+ * sport small map window -> ViewArea 2, or ViewArea 1 when the AltScreen hook
+ * advertises only two (sport opt-in marker not set). */
 static void on_alt_zone(uint16_t type, uint8_t flags, const uint8_t* payload,
                         uint32_t len, void* ctx) {
-    int view;
+    int view, rc;
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 1) return;
-    view = payload[0] == 0 ? 0 : 1;
+    view = payload[0] == 0 ? 0 : payload[0] == 1 ? 2 : 1;
     resolve();
     if (!g_view_area) {
         if (!g_missing_logged) {
@@ -75,7 +77,12 @@ static void on_alt_zone(uint16_t type, uint8_t flags, const uint8_t* payload,
         }
         return;
     }
-    LOG_INFO(LOG_MODULE, "CMD_ALT_ZONE mode=%u -> view area %d rc=%d", payload[0], view, g_view_area(view));
+    rc = g_view_area(view);
+    if (rc < 0 && view == 2) {
+        view = 1;
+        rc = g_view_area(view);
+    }
+    LOG_INFO(LOG_MODULE, "CMD_ALT_ZONE mode=%u -> view area %d rc=%d", payload[0], view, rc);
 }
 
 /* CMD_ALT_RGI [u8 0=off 1=on]: Java's confirmed route-guidance presentation. The AltScreen
