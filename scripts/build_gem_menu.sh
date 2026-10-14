@@ -32,6 +32,7 @@ safearea|safearea|Apply SafeArea from SD (carplay_safearea*.conf)
 safearea_reset|safearea_reset|Reset SafeArea to built-in
 singleview|singleview|Classic-view SafeArea ON / OFF (2 ViewAreas)
 sportview|sportview|Sport own ViewArea ON / OFF (toggle, default OFF)
+appcard|appcard|App turn card on cluster during route ON / OFF (toggle, default OFF)
 reacquire|reacquire|Re-request cluster map (test app switching)
 hwdec|hwdec|HW decoder ON / OFF (toggle, default ON)
 hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default OFF)
