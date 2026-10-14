@@ -90,14 +90,19 @@ them when present, `carplay_startup.sh` preloads the hook beside `libcarplay_hoo
 ## 3. SafeArea and ViewAreas
 
 iOS draws the map over the whole 1440×540 canvas but keeps the puck and its overlays inside the
-**SafeArea**. The hook advertises two full-canvas ViewAreas that differ only in SafeArea:
+**SafeArea**. The hook advertises two (three with the sport opt-in) full-canvas ViewAreas that differ only in SafeArea:
 
 | index | VC layout | built-in SafeArea | override file |
 | --- | --- | --- | --- |
 | 0 | wide map (small dials) | x=360 y=87 w=720 h=270 | `/mnt/app/root/mibr-carplay111-safearea.conf` |
 | 1 | classic small map (big dials) | x=520 y=87 w=400 h=270 | `/mnt/app/root/mibr-carplay111-safearea-small.conf` |
+| 2 | sport small map (opt-in) | x=590 y=88 w=350 h=296 | `/mnt/app/root/mibr-carplay111-safearea-sport.conf` |
 
-VC FctID 54 (`largeMapView`) selects the view: Java sends `CMD_ALT_ZONE`, `hook/altzoom` calls
+VC FctID 54 (`largeMapView`) selects wide or classic; the small map on the Sport layout (stock
+small-stage offset, e.g. -476,0, applied to plane 99) selects sport. In Sport the stock map planes
+and plane 99 are moved by that offset, so the visible window is another part of the canvas and needs
+its own SafeArea (index 2 = the commercial MHI2Q package's sport-small entry). Java sends `CMD_ALT_ZONE`
+(mode 0 = wide, 1 = sport, 2 = classic), `hook/altzoom` calls
 `altscreen111_view_area()`, and the control worker sends `updateViewArea` (which **must** carry
 `adjacentViewAreas`, or iOS acknowledges but keeps the old layout) until the phone acknowledges.
 The current view is also the `initialViewArea` of the next `/info`.
@@ -105,12 +110,13 @@ The current view is also the `initialViewArea` of the next `/info`.
 Calibration from the GEM **CarPlay-RGI** page:
 
 1. *Calibration grid ON / OFF* — ruler over the video, lines every 60 px.
-2. Put `x=`/`y=`/`w=`/`h=` in `carplay_safearea.conf` and/or `carplay_safearea_small.conf` in the
-   card root, press *Apply SafeArea from SD*, reconnect.
+2. Put `x=`/`y=`/`w=`/`h=` in `carplay_safearea.conf`, `carplay_safearea_small.conf` and/or
+   `carplay_safearea_sport.conf` in the card root, press *Apply SafeArea from SD*, reconnect.
 3. *Reset SafeArea to built-in* returns to the table above. *Classic-view SafeArea ON / OFF*
-   falls back to a single ViewArea.
+   falls back to a single ViewArea. *Sport own ViewArea ON / OFF* (marker `/mnt/app/root/mibr-carplay111-viewareas.sport`)
+   adds index 2 for the Sport layout; without it Sport uses classic.
 
-The hook logs what it advertised: `GEN2 ViewArea[n] wide|classic area=... safe=...` and
+The hook logs what it advertised: `GEN2 ViewArea[n] wide|classic|sport area=... safe=...` and
 `gen2 view area -> n`.
 
 > [!WARNING]

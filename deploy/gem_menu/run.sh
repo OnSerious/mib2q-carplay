@@ -11,8 +11,9 @@
 #   install      - the release (libcarplay_hook.so ...) in <card>/mod/carplay/
 #                  or <card>/carplay/, i.e. a staged install_MoreIncredibleBash
 #   logs, lsd    - any writable card/USB stick for the output folder
-#   safearea     - <card>/carplay_safearea.conf (wide VC map) and/or
-#                  <card>/carplay_safearea_small.conf (classic small map), x=/y=/w=/h=
+#   safearea     - <card>/carplay_safearea.conf (wide VC map),
+#                  <card>/carplay_safearea_small.conf (classic small map) and/or
+#                  <card>/carplay_safearea_sport.conf (sport small map), x=/y=/w=/h=
 #                  like the altscreen_safearea mod's safearea.conf
 #
 # QNX 6.5 /bin/sh is ksh; stays inside its portable subset.
@@ -80,10 +81,12 @@ case $ACT in
         ;;
     safearea)
         # carplay_safearea.conf = wide VC map (ViewArea 0),
-        # carplay_safearea_small.conf = classic small map window (ViewArea 1).
+        # carplay_safearea_small.conf = classic small map window (ViewArea 1),
+        # carplay_safearea_sport.conf = sport small map window (ViewArea 2).
         n=0
         for name in carplay_safearea.conf:mibr-carplay111-safearea.conf \
-                    carplay_safearea_small.conf:mibr-carplay111-safearea-small.conf; do
+                    carplay_safearea_small.conf:mibr-carplay111-safearea-small.conf \
+                    carplay_safearea_sport.conf:mibr-carplay111-safearea-sport.conf; do
             F=
             for c in $CARDS; do
                 [ -f "$c/${name%%:*}" ] && { F=$c/${name%%:*}; break; }
@@ -94,11 +97,11 @@ case $ACT in
                 /bin/sh "$A/altscreen_safearea/custom.sh" || exit 1
             n=$((n+1))
         done
-        [ "$n" -gt 0 ] || { echo "FAILED: no carplay_safearea.conf / carplay_safearea_small.conf in the root of the SD card"; exit 1; }
+        [ "$n" -gt 0 ] || { echo "FAILED: no carplay_safearea.conf / carplay_safearea_small.conf / carplay_safearea_sport.conf in the root of the SD card"; exit 1; }
         ;;
     safearea_reset)
         echo reset > /tmp/carplay_safearea_reset.conf || exit 1
-        for f in mibr-carplay111-safearea.conf mibr-carplay111-safearea-small.conf; do
+        for f in mibr-carplay111-safearea.conf mibr-carplay111-safearea-small.conf mibr-carplay111-safearea-sport.conf; do
             CP_SAFEAREA_SRC=/tmp/carplay_safearea_reset.conf CP_SAFEAREA_DST=/mnt/app/root/$f \
                 /bin/sh "$A/altscreen_safearea/custom.sh" || exit 1
         done
@@ -109,11 +112,25 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Two ViewAreas (wide + classic) from the next CarPlay connection."
+            echo "DONE. ViewAreas wide + classic + sport from the next CarPlay connection."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
             echo "DONE. Single ViewArea (wide only) from the next CarPlay connection."
+        fi
+        ;;
+    sportview)
+        # Opt-in: own ViewArea for the Sport layout's small map (x=590 y=88 350x296),
+        # instead of the classic one. Read when the AltScreen hook starts its profile.
+        M=/mnt/app/root/mibr-carplay111-viewareas.sport
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. Sport uses the classic ViewArea (default). Reconnect the phone; if nothing changes, restart the MMI."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. Sport gets its own ViewArea. Reconnect the phone; if nothing changes, restart the MMI."
         fi
         ;;
     grid)
@@ -214,7 +231,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac
