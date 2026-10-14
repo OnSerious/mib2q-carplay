@@ -133,6 +133,21 @@ case $ACT in
             echo "DONE. Sport gets its own ViewArea. Reconnect the phone; if nothing changes, restart the MMI."
         fi
         ;;
+    appcard)
+        # Opt-in: keep the app's own turn card (e.g. "Start on <street>") and ETA in the
+        # cluster video while route guidance is on, as before 1.2. The hook re-reads the
+        # marker on every guidance edge, so it applies from the next route start.
+        M=/mnt/app/root/mibr-carplay111-rgi-url.disabled
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. Route guidance: map only, our arrow (default). Applies from the next route start."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. Route guidance: app turn card stays on the cluster map. Applies from the next route start."
+        fi
+        ;;
     grid)
         run_action altscreen_grid
         ;;
@@ -231,7 +246,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|appcard|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac
