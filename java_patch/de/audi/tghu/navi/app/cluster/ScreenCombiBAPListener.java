@@ -48,6 +48,9 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
      * also covers internal supplementary visibility changes and initial Status replay,
      * which bypass the two-argument BAP request setter. */
     protected void updateMapVisibility() {
+        /* lvdsMapVisible is the VC's main-map request: its navigation tab is up.  It gates the
+         * steering-wheel roller press when the unit has no IMMICombiScreenChangeManager. */
+        com.luka.carplay.core.ScreenModule.onVcMainMapVisibility(this.lvdsMapVisible);
         com.luka.carplay.cluster.ClusterLayerController.onVcVisibility(this.supplementaryMapViewVisible);
         super.updateMapVisibility();
     }

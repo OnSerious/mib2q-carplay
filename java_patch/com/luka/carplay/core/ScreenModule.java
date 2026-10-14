@@ -143,8 +143,9 @@ public final class ScreenModule implements Module {
         if (altScreenActive == active) return;
         altScreenActive = active;
         Log.i(TAG, "altScreen video " + (active ? "live -> ctx 81/82" : "stopped -> ctx 74/80"));
-        /* Stock NAVSD INITIALIZING must not cover the phone video on plane 99. */
-        ScreenNavStatusGate.setAltScreenActive(active);
+        /* Stock NAVSD INITIALIZING must not cover the phone video on plane 99; with the
+         * stock map chosen (long press) the stock map is the visible layer again. */
+        ScreenNavStatusGate.setAltScreenActive(active && !userStockMap);
         republish();
     }
 
@@ -157,12 +158,34 @@ public final class ScreenModule implements Module {
      *  phone's map and the stock Audi map, as chefranov/mhi2-au37x-carplay does on the A3.
      *  While the stock map is shown the roller zooms only the stock map. */
     public static void onSteeringWheelLongPress() {
-        if (!isConnected()) return;
-        userStockMap = !userStockMap;
-        Log.i(TAG, "MFW long press: cluster -> " + (userStockMap ? "stock map" : "phone map"));
+        boolean stock;
+        synchronized (LOCK) {
+            if (!platformSupported || !connected || !altScreenActive) return;  /* no phone video to hide */
+            userStockMap = !userStockMap;
+            stock = userStockMap;
+        }
+        Log.i(TAG, "MFW long press: cluster -> " + (stock ? "stock map" : "phone map"));
+        /* Stock NAVSD INITIALIZING is only suppressed while the phone video is the visible layer. */
+        ScreenNavStatusGate.setAltScreenActive(!stock);
         republish();
         com.luka.carplay.cluster.ClusterLayerController.reapply();
     }
+
+    /* VC's own map visibility (BAP MapViewAndOrientation lvdsMapIsVisible): true while the VC
+     * shows its navigation map, false on the other cockpit tabs.  -1 until the VC first reports
+     * it.  It is VC state, not session state, so start()/stop() leave it alone. */
+    private static volatile int vcMainMap = -1;
+
+    /** Fed by ScreenCombiBAPListener.updateMapVisibility() with the accepted stock value. */
+    public static void onVcMainMapVisibility(boolean visible) {
+        int v = visible ? 1 : 0;
+        if (vcMainMap == v) return;
+        vcMainMap = v;
+        Log.i(TAG, "VC main map visible=" + visible);
+    }
+
+    /** -1 unknown, 0 another cockpit tab, 1 VC map tab. */
+    public static int vcMainMapState() { return vcMainMap; }
 
     /** Presentation latch, not merely route intent.  RouteGuidance may set true only after the
      *  BAP presentation has started (bap.onStart()); the renderer's FRAME_READY is not waited for.
