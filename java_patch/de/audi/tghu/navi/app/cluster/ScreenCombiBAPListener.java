@@ -59,7 +59,7 @@ public final class ScreenCombiBAPListener extends CombiBAPListener {
      * zoom level back, so following the stock scale is the only honest value for that bar. */
     public void setMapScale(int steps) {
         boolean connected = com.luka.carplay.core.ScreenModule.isConnected();
-        boolean video = com.luka.carplay.core.ScreenModule.isAltScreenActive();
+        boolean video = com.luka.carplay.core.ScreenModule.isAltScreenShown();
         if (steps != 0 && connected && video
                 && com.luka.carplay.core.CarPlayApp.isAndroidAutoActive()) {
             /* Android Auto has no zoom command for its cluster map: stock map/scale bar only. */

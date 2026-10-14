@@ -37,6 +37,9 @@ public final class SteeringWheelInputModule implements Module {
     private static final int KEY_MFW_ROLLER_LEFT = 40;
     private static final int KST_RELEASED = 0;
     private static final int KST_PRESSED = 1;
+    /* The keypanel reports a held key itself: PRESSED(1), LONGPRESSED(3), LONGPRESSED2(4),
+     * LONGPRESSED3(5), RELEASED(0).  Stock KbdListener turns 3 into KEY_LONG_PRESSED. */
+    private static final int KST_LONGPRESSED = 3;
     private static final int ATTR_VALID = 1;
     private static final long COLLAPSED_SELECT_WINDOW_MS = 600L;
 
@@ -52,6 +55,9 @@ public final class SteeringWheelInputModule implements Module {
     private volatile IMMICombiScreenChangeManager combiManager;
     private ServiceRegistration listenerRegistration;
     private volatile boolean running;
+    /* Current key-40 press: map tab at PRESSED, and whether LONGPRESSED came before RELEASED. */
+    private boolean pressMapTab;
+    private boolean pressLong;
 
     public String name() { return "mfw-input"; }
 
@@ -213,16 +219,38 @@ public final class SteeringWheelInputModule implements Module {
                 return;
             }
             if (keyCode != KEY_MFW_ROLLER_LEFT
-                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)
-                    || (keyState != KST_PRESSED && keyState != KST_RELEASED)) return;
+                    || (keyboardId != KBD_MFW && keyboardId != KBD_MFW_3GP)) return;
+
+            if (keyState == KST_LONGPRESSED) {
+                synchronized (SteeringWheelInputModule.this) {
+                    if (pressLong) return;
+                    pressLong = true;
+                }
+                Log.i(TAG, "MFW OK long press board=" + keyboardId);
+                ScreenModule.onSteeringWheelLongPress();
+                return;
+            }
+            if (keyState != KST_PRESSED && keyState != KST_RELEASED) return;
 
             armCollapsedSelect(keyState);
-            if (keyState != KST_PRESSED) return;
+            if (keyState == KST_PRESSED) {
+                boolean mapTab = isConfirmedMapTab();
+                Log.i(TAG, "MFW OK pressed board=" + keyboardId + " mapTab=" + mapTab);
+                synchronized (SteeringWheelInputModule.this) {
+                    pressMapTab = mapTab;
+                    pressLong = false;
+                }
+                return;
+            }
 
-            boolean mapTab = isConfirmedMapTab();
-            Log.i(TAG, "MFW OK pressed board=" + keyboardId + " mapTab=" + mapTab);
-            if (!mapTab) return;
-            ScreenModule.onSteeringWheelOkPressed();
+            /* Short press acts on RELEASED, so a long press never toggles the route-info line. */
+            boolean shortPress;
+            synchronized (SteeringWheelInputModule.this) {
+                shortPress = pressMapTab && !pressLong;
+                pressMapTab = false;
+                pressLong = false;
+            }
+            if (shortPress) ScreenModule.onSteeringWheelOkPressed();
         }
 
         public void asyncException(int errorCode, String errorString, int requestType) { }
