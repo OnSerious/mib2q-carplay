@@ -94,8 +94,8 @@ iOS draws the map over the whole 1440×540 canvas but keeps the puck and its ove
 
 | index | VC layout | built-in SafeArea | override file |
 | --- | --- | --- | --- |
-| 0 | wide map (small dials) | x=360 y=87 w=720 h=297 | `/mnt/app/root/mibr-carplay111-safearea.conf` |
-| 1 | classic small map (big dials) | x=520 y=87 w=400 h=297 | `/mnt/app/root/mibr-carplay111-safearea-small.conf` |
+| 0 | wide map (small dials) | x=360 y=87 w=720 h=270 | `/mnt/app/root/mibr-carplay111-safearea.conf` |
+| 1 | classic small map (big dials) | x=520 y=87 w=400 h=270 | `/mnt/app/root/mibr-carplay111-safearea-small.conf` |
 
 VC FctID 54 (`largeMapView`) selects the view: Java sends `CMD_ALT_ZONE`, `hook/altzoom` calls
 `altscreen111_view_area()`, and the control worker sends `updateViewArea` (which **must** carry
@@ -149,7 +149,7 @@ Hook (`libaltscreen111_mhi2q.so`), env in the carplay child:
 | `ALTSCREEN111_ADVERTISE` | 1 | 0 = `/info` byte-for-byte stock (same as `/mnt/app/mibr-carplay111.noadvertise`, the GEM *Cluster video OFF*) |
 | `ALTSCREEN111_PORT` | 7100 | stream-111 port (§4); `/mnt/app/mibr-carplay111.port` wins |
 | `ALTSCREEN111_WIDTH` / `_HEIGHT` | 1440 / 540 | advertised secondary display |
-| `ALTSCREEN111_FPS` | 30 | advertised max frame rate (`/mnt/app/root/mibr-carplay111-fps` overrides, 5-60; above 30 at own risk, some MHI2Q builds crash at 60) |
+| `ALTSCREEN111_FPS` | 30 | advertised max frame rate (`/mnt/app/root/mibr-carplay111-fps` overrides, 5-60; above 30 at own risk, some MHI2Q builds crash at 60. The VC captures plane 99 on a fixed 33 ms timer in `videoencoderservice`, so more than 30 fps does not reach the cockpit; it only adds decode load) |
 | `ALTSCREEN111_WIDTH_MM` / `_HEIGHT_MM` | 290 / 108 | advertised physical size; iOS scales the cluster UI from it (`/mnt/app/root/mibr-carplay111-physical` with `w h` in mm overrides, e.g. `echo 320 120 > …` for the larger MIBSI geometry) |
 | `ALTSCREEN111_TEE_PORT` | 19820 | loopback Annex-B tee |
 | `ALTSCREEN111_INLINE_HOOKS` | 0 | 1 = also install inline prologue hooks if PLT interposition is not on the call path |
@@ -160,6 +160,20 @@ uses one ViewArea; `mibr-carplay111-noadvertise.senders` lists extra senders (on
 `model osBuildVersion` line, `*` = any build) that get the stock `/info`. The known wireless
 dongle (`model=iPhone9,1`, `osBuildVersion=18D70`) is built in: it never requests stream 111 and
 drops the session when it sees the advertisement.
+
+**Cluster URL follows the guidance source** (ported from luka-dev/mib2q-carplay-rgi). Java sends
+`CMD_ALT_RGI 0x0116` on every confirmed route-guidance edge (`ScreenModule.republish`, again on the
+hook's hello); `libcarplay_hook` hands it to `altscreen111_set_rgi`, which re-sends `showUI`:
+
+| route guidance | URL | why |
+| --- | --- | --- |
+| on (our BAP/KDK arrow) | `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no` | Maps' own turn card and ETA would show twice; the root URL keeps them even with `showETA=no` |
+| off (Waze, no route) | `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no` | the app's own turn card and ETA are the only guidance on the cluster |
+
+Every existing URL override wins (`/tmp/mibr-alt111-url-mode`, `mibr-carplay111-nav.surface`,
+`mibr-carplay111-url-map.enabled`, `mibr-carplay111-nav-query.enabled`, `ALTSCREEN111_PARITY_URL`).
+`mibr-carplay111-rgi-url.disabled` restores the historic bare `maps:/car/instrumentcluster`.
+*Car test pending on MU1329.*
 
 Renderer (`altscreen_render`):
 
@@ -172,6 +186,14 @@ Renderer (`altscreen_render`):
 | `ALTR_LIVE_TIMEOUT_MS` | 500 | heartbeat removed if no frame within this |
 | `ALTR_STATUS_FILE` | `/tmp/altscreen_render.status` | `state=`, size, `frames=` |
 | `/mnt/app/root/altscreen_render.hwdecode.off` | absent | software decode (GEM *HW decoder ON / OFF*); `/tmp/…` for this boot only |
+| `/mnt/app/root/altscreen_render.hwdecode.delayed` | absent | CarPlay waits `ALTR_HW_MIN_UPTIME_S` (120 s) before hardware decode (GEM *HW decoder 2-min delayed start*); Android Auto always waits |
+
+The renderer runs at QNX priority 15 (like `maneuver_render`): at the default 10 the compositor's
+workers can stall every renderer thread for 300-650 ms at once (measured upstream, 2026-10-09).
+
+Stock NAVSD *INITIALIZING* (stock navigation still loading its map) would also cover plane 99, so
+`GatedCombiService.setAltScreenTakeover` defers it while the phone video is live and replays the
+latest stock state when the video stops (`ScreenNavStatusGate.setAltScreenActive`).
 
 Java: `-Dcarplay.altscreen.liveFile=…` if `ALTR_LIVE_FILE` changes.
 

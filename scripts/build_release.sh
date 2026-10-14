@@ -59,8 +59,7 @@ cp -R "$MODS/menu_install_MoreIncredibleBash/mod/carplay_menu" "$OUT/SD-CARD/mod
 
 # Extras: single M.I.B. mods (the setup covers install + menu)
 for m in uninstall logging altscreen_on altscreen_off rgd_enable rgd_disable \
-         altscreen_grid altscreen_safearea extract_lsd aa_cluster_on aa_cluster_off touchpad_dpad_on touchpad_dpad_off \
-         native_arrows_on native_arrows_off; do
+         altscreen_grid altscreen_safearea extract_lsd aa_cluster_on aa_cluster_off touchpad_dpad_on touchpad_dpad_off; do
     src="$MODS/${m}_MoreIncredibleBash/mod"
     [ -s "$src/custom.sh" ] || { echo "ERROR: missing $src/custom.sh"; exit 1; }
     mkdir -p "$OUT/extras/MIB-mods/$m/mod"

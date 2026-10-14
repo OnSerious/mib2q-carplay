@@ -77,7 +77,9 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
 
   echo "--- verify (ARM ELF, no emutls) ---"
   for b in maneuver_render; do
-    B=/src/build/$b
+    # Verify a container-local copy: the 32-bit SDK readelf/nm hit EOVERFLOW on some
+    # bind mounts (Docker Desktop on Windows), as in build_altscreen_render.sh.
+    cp /src/build/$b /tmp/_verify_$b; B=/tmp/_verify_$b
     m=$(arm-unknown-nto-qnx6.5.0eabi-readelf -h "$B" | awk -F: "/Machine/{print \$2}" | tr -d " ")
     e=$(arm-unknown-nto-qnx6.5.0eabi-nm "$B" 2>/dev/null | grep -ci emutls || true)
     echo "  $b: machine=$m emutls=$e"

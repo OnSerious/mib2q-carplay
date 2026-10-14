@@ -3,7 +3,7 @@
 | Component | Where | License / status |
 | --- | --- | --- |
 | mib2q-carplay (this project) | all files unless listed below | GPL-3.0-or-later, see `LICENSE` |
-| [luka-dev/mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi) | files marked `Copyright (c) LuKa (@LuKa_dev)` in the source; built into `libcarplay_hook.so`, `maneuver_render`, `carplay_hook.jar`, the `carplay_*.sh` scripts | published **without a license**; the author's terms apply |
+| [luka-dev/mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi) | files marked `Copyright (c) LuKa (@LuKa_dev)` in the source, including the 1.2 ports (telephony and vehicle-data hook modules, phone-tab and Siri classes); built into `libcarplay_hook.so`, `maneuver_render`, `carplay_hook.jar`, the `carplay_*.sh` scripts and the installer | GPL-3.0-or-later (upstream `LICENSE` and `NOTICE.md` since commit `f2141d0`); keep the copyright lines when redistributing |
 | [harman-f/mhi2_altscreen_carplay](https://github.com/harman-f/mhi2_altscreen_carplay) | GEN2 cluster-video hook, built into `libaltscreen111_mhi2q.so` | GPL-3.0-or-later |
 | [wasimlhr/mib2q-android-auto-cluster](https://github.com/wasimlhr/mib2q-android-auto-cluster) | Android Auto: `aa_hook/` (built into `libaa_cluster_hook.so`), `com.luka.carplay.aa` and the rebuilt `androidauto2` classes in `carplay_hook.jar` | GPL-3.0-or-later |
 | [chopinwong01/mhi2-android-auto-video-vc](https://github.com/chopinwong01/mhi2-android-auto-video-vc) | receiver protocol injection the Android Auto hook adapts | GPL-3.0 |

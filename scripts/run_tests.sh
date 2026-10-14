@@ -115,6 +115,18 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     tests/aa_uiconfig_test.c -ldl -o "$OUT/aa_uiconfig"
 "$OUT/aa_uiconfig"
 
+printf '%-32s ' tel_hook_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -DENABLE_LOGGING=0 -Ihook tests/tel_hook_test.c hook/telephony/tel_hook.c \
+    hook/framework/iap2_protocol.c -o "$OUT/tel_hook"
+"$OUT/tel_hook"
+
+printf '%-32s ' vehicle_hook_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
+    -DENABLE_LOGGING=0 -DVEHICLE_HOOK_TESTING -Ihook tests/vehicle_hook_test.c hook/vehicle/vehicle_hook.c \
+    hook/framework/iap2_protocol.c -o "$OUT/vehicle_hook"
+"$OUT/vehicle_hook"
+
 printf '%-32s ' aa_tee_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Iaa_hook \
     tests/aa_tee_test.c aa_hook/aa_tee.c -lpthread -o "$OUT/aa_tee"

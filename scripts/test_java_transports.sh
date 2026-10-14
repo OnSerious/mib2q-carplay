@@ -16,8 +16,25 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.bus.CarplayBusTransportTest
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar" com.luka.carplay.rgd.RendererServerTransportTest
 
-# NAVSD INITIALIZING/READY must pass straight through the RGI gate
-# (the altscreen INITIALIZING takeover and AltScreenStartupTest do not apply here).
+# Vehicle data -> CMD_VEHICLE wire layout (hook/vehicle reads the same 14 bytes).
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/VehicleDataEncodingTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    com.luka.carplay.core.VehicleDataEncodingTest
+
+# Cluster phone tab: Android Auto's FctID 14 type 6 reaches the VC as HFP 3.
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/GatedPhoneAndroidAutoTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    com.luka.carplay.telephony.GatedPhoneAndroidAutoTest
+
+# Siri on a short voice-key press is opt-in (marker); default = stock car voice control.
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/SiriShortPressTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" SiriShortPressTest
+
+# NAVSD INITIALIZING/READY passes through the RGI gate, and is deferred while the
+# phone video owns plane 99 (cold-boot INITIALIZING takeover).
 mkdir -p "$TEST_DIR/nav-init"
 "$TEST_JDK/bin/javac" -encoding UTF-8 \
     -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \

@@ -42,7 +42,9 @@
  *                   (car log 020: one picture every ~6 s), so a picture gap is not
  *                   a lost stream there; the tee closing is
  *   ALTR_HW_MIN_UPTIME_S (default 120) — no hardware decoder before this uptime;
- *                   software decode until then, then one reconnect to hardware
+ *                   software decode until then, then one reconnect to hardware.
+ *                   Android Auto always; CarPlay only with the marker
+ *                   /mnt/app/root/altscreen_render.hwdecode.delayed (GEM toggle)
  *
  * Copyright (c) 2026
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -72,6 +74,7 @@
 #ifdef PLATFORM_QNX
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include <sys/neutrino.h>   /* setprio() */
 #include "cluster_surface.h"
 #endif
 
@@ -125,7 +128,13 @@ struct source {
     int live_timeout_ms;        /* .live removed this long after the last shown picture; 0 = never while connected */
     const char *hw_off_marker;  /* persistent "hardware decode off" switch */
     const char *hw_off_boot;    /* the same for this boot (/tmp) */
+    const char *hw_settle_marker; /* present => wait ALTR_HW_MIN_UPTIME_S before hardware; NULL = always wait */
 };
+
+/* Delayed hardware start (GEM "HW decoder delayed start"): CarPlay starts on hardware at once
+ * (as upstream mib2q-carplay-rgi), the marker brings back the boot settle time (issue #10).
+ * Android Auto always waits: its 1080p decoder hung the video core 64 s after boot (#14). */
+#define ALTR_HW_SETTLE_MARKER "/mnt/app/root/altscreen_render.hwdecode.delayed"
 
 /* ---- liveness / status files (read by the Java cluster context module) ---- */
 static const char *g_live_file;
@@ -192,8 +201,9 @@ struct app {
     altr_hwdec_t *hw;         /* hardware decode session, NULL = software path */
     uint64_t hw_frames_seen;
     int hw_tried;             /* hardware attempted on this tee connection */
-    int hw_deferred;          /* software decode only because of the boot settle time */
-    uint64_t hw_min_uptime_ms;
+    int hw_deferred;          /* software decode for now: boot settle time or start cooldown */
+    uint64_t hw_min_uptime_ms;    /* configured boot settle time (ALTR_HW_MIN_UPTIME_S) */
+    uint64_t hw_upgrade_at_ms;    /* deferred: reconnect to hardware at this uptime */
     uint64_t live_hold_until_ms;  /* planned switch to hardware: keep .live fresh until the first picture */
 #endif
 };
@@ -393,6 +403,94 @@ static void hw_switch_off(const struct source *s)
                  s->hw_off_marker, errno);
 }
 
+/* Bounded hardware-decoder starts across renderer restarts (idea from
+ * luka-dev/mib2q-carplay-rgi, sink_omx_qnx.c).  Failures this process sees
+ * already switch hardware decode off (hw_give_up, the watchdog); what they miss
+ * is a renderer that dies inside the decoder start or before the first picture:
+ * carplay_monitor.sh restarts it and it would try hardware again, and each failed
+ * OMX_GetHandle can hold a decoder slot that dio_manager's own decoder then
+ * lacks.  A per-source /tmp record counts starts that never produced a picture:
+ * after 3, hardware waits 30 s (software meanwhile, the boot-settle upgrade then
+ * reconnects); after a second set of 3 it stays off for this boot. */
+#define ALTR_HW_START_MAX     3u
+#define ALTR_HW_COOLDOWN_MS   30000u
+#define ALTR_HW_ROUNDS_MAX    2u
+
+struct hw_starts { unsigned starts, rounds; unsigned long long until_ms; };
+
+static void hw_starts_path(const struct source *s, char *out, size_t cap)
+{
+    snprintf(out, cap, "%s.starts", s->hw_off_boot);
+}
+
+static void hw_starts_load(const struct source *s, struct hw_starts *st)
+{
+    char p[160];
+    FILE *f;
+    memset(st, 0, sizeof(*st));
+    hw_starts_path(s, p, sizeof(p));
+    f = fopen(p, "r");
+    if (!f) return;
+    if (fscanf(f, "%u %u %llu", &st->starts, &st->rounds, &st->until_ms) != 3)
+        memset(st, 0, sizeof(*st));
+    fclose(f);
+}
+
+static void hw_starts_save(const struct source *s, const struct hw_starts *st)
+{
+    char p[160];
+    FILE *f;
+    hw_starts_path(s, p, sizeof(p));
+    f = fopen(p, "w");
+    if (!f) return;
+    fprintf(f, "%u %u %llu\n", st->starts, st->rounds, st->until_ms);
+    fclose(f);
+}
+
+/* A picture came out (or the session closed cleanly): the decoder works. */
+static void hw_starts_clear(const struct source *s)
+{
+    char p[160];
+    hw_starts_path(s, p, sizeof(p));
+    unlink(p);
+}
+
+/* Before a hardware start.  0 = go ahead (counted), 1 = software until
+ * *defer_until, -1 = hardware off for this boot. */
+static int hw_starts_begin(const struct source *s, uint64_t now, uint64_t *defer_until)
+{
+    struct hw_starts st;
+    int fd;
+    hw_starts_load(s, &st);
+    if (st.until_ms && now < st.until_ms) {
+        *defer_until = st.until_ms;
+        return 1;
+    }
+    if (st.starts >= ALTR_HW_START_MAX) {
+        st.starts = 0;
+        if (++st.rounds >= ALTR_HW_ROUNDS_MAX) {
+            fd = open(s->hw_off_boot, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd >= 0) close(fd);
+            hw_starts_save(s, &st);
+            fprintf(stderr, "altscreen_render: %s hardware decoder never produced a picture in "
+                    "%u starts; hardware decode off for this boot\n", s->name,
+                    ALTR_HW_START_MAX * ALTR_HW_ROUNDS_MAX);
+            return -1;
+        }
+        st.until_ms = now + ALTR_HW_COOLDOWN_MS;
+        hw_starts_save(s, &st);
+        fprintf(stderr, "altscreen_render: %s hardware decoder never produced a picture in %u "
+                "starts; software decode for %u s to protect the decoder pool\n", s->name,
+                ALTR_HW_START_MAX, ALTR_HW_COOLDOWN_MS / 1000u);
+        *defer_until = st.until_ms;
+        return 1;
+    }
+    st.until_ms = 0;
+    st.starts++;
+    hw_starts_save(s, &st);
+    return 0;
+}
+
 /* Watchdog for calls into the OMX component. They are IPC to videoCore, which
  * the stock decoders share; once the Venus core hangs (issue #14: slog
  * VCD_HWTimeoutHandler) a call can block for good, and with this process stuck
@@ -486,6 +584,7 @@ static void hw_close(struct app *a)
                 "exiting for a clean restart\n");
         _exit(3);
     }
+    hw_starts_clear(a->src);    /* started and stopped cleanly: not a failing start */
     a->hw = NULL;
 }
 
@@ -526,6 +625,7 @@ static void sources_init(struct source *src, int *nsrc, int surface_w, int surfa
     src[*nsrc].live_timeout_ms = env_i("ALTR_LIVE_TIMEOUT_MS", 500);
     src[*nsrc].hw_off_marker = ALTR_HWDEC_OFF_MARKER;
     src[*nsrc].hw_off_boot = ALTR_HWDEC_OFF_BOOT;
+    src[*nsrc].hw_settle_marker = ALTR_HW_SETTLE_MARKER;
     (*nsrc)++;
 
     if (env_i("ALTR_AA_TEE_PORT", 19821) <= 0) return;
@@ -553,6 +653,7 @@ static void sources_init(struct source *src, int *nsrc, int surface_w, int surfa
     src[*nsrc].live_timeout_ms = env_i("ALTR_AA_LIVE_TIMEOUT_MS", 0);
     src[*nsrc].hw_off_marker = ALTR_AA_HWDEC_OFF_MARKER;
     src[*nsrc].hw_off_boot = ALTR_AA_HWDEC_OFF_BOOT;
+    src[*nsrc].hw_settle_marker = NULL;          /* always wait (issue #14) */
     (*nsrc)++;
 }
 
@@ -565,6 +666,17 @@ int main(void)
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
+
+#ifdef PLATFORM_QNX
+    /* The compositor's workers starve a default-priority renderer on this unit:
+     * every thread (socket, decoder callback, presenter, main) can lose 300-650 ms
+     * at once several times per minute (measured in luka-dev/mib2q-carplay-rgi,
+     * 2026-10-09).  maneuver_render runs at 15 for the same reason.  Set it before
+     * any thread exists so they all inherit it. */
+    if (setprio(0, 15) < 0)
+        fprintf(stderr, "altscreen_render: setprio(15) failed: %s; running at default\n",
+                strerror(errno));
+#endif
 
     const char *host = env_s("ALTR_TEE_HOST", "127.0.0.1");
     g_live_file   = env_s("ALTR_LIVE_FILE",   "/tmp/altscreen_render.live");
@@ -646,10 +758,10 @@ int main(void)
             if (g_stop) { close(fd); goto done; }
             omx_probe_poll(a.surface_w, a.surface_h);
 #ifdef PLATFORM_QNX
-            if (a.hw_deferred && now_ms() >= a.hw_min_uptime_ms) {
+            if (a.hw_deferred && now_ms() >= a.hw_upgrade_at_ms) {
                 /* The tee replays from the last keyframe, so the reconnect costs
                  * one picture; .live is kept so the cockpit does not switch away. */
-                fprintf(stderr, "altscreen_render: boot settle time over; reconnecting %s for "
+                fprintf(stderr, "altscreen_render: hardware wait over; reconnecting %s for "
                         "hardware decode\n", s->name);
                 upgrade = 1;
                 a.live_hold_until_ms = now_ms() + ALTR_UPGRADE_LIVE_HOLD_MS;
@@ -665,7 +777,11 @@ int main(void)
                 if (n <= 0) break;
 #ifdef PLATFORM_QNX
                 if (!a.hw && !a.hw_tried && !a.hw_deferred && hw_wanted(s)) {
-                    if (now_ms() < a.hw_min_uptime_ms) {
+                    int hw_gate;
+                    uint64_t hw_defer_until = 0;
+                    /* CarPlay waits only with the GEM "delayed start" marker; Android Auto always. */
+                    int settle = !s->hw_settle_marker || access(s->hw_settle_marker, F_OK) == 0;
+                    if (settle && now_ms() < a.hw_min_uptime_ms) {
                         /* Issue #14: a 1080p Android Auto decoder opened ~64 s after
                          * boot (phone route already active, so the cluster stream
                          * starts with the session) hung the shared Venus core
@@ -676,7 +792,17 @@ int main(void)
                                 "decode until the video hardware has settled\n",
                                 (unsigned long long)(now_ms() / 1000u),
                                 (unsigned long long)(a.hw_min_uptime_ms / 1000u), s->name);
+                        a.hw_upgrade_at_ms = a.hw_min_uptime_ms;
                         a.hw_deferred = 1;
+                    } else if ((hw_gate = hw_starts_begin(s, now_ms(), &hw_defer_until)) != 0) {
+                        if (hw_gate > 0) {
+                            /* Same path as the boot settle time: software now, one
+                             * reconnect to hardware when the cooldown is over. */
+                            a.hw_upgrade_at_ms = hw_defer_until;
+                            a.hw_deferred = 1;
+                        } else {
+                            a.hw_tried = 1;          /* off for this boot: software only */
+                        }
                     } else {
                         int stuck = 0;
                         a.hw_tried = 1;
@@ -712,6 +838,7 @@ int main(void)
                     }
                     hf = altr_hwdec_frames(a.hw);
                     if (hf > a.hw_frames_seen) {
+                        if (a.hw_frames_seen == 0) hw_starts_clear(s);   /* decoder works */
                         a.frames += hf - a.hw_frames_seen;
                         a.hw_frames_seen = hf;
                         a.last_w = s->view.view_w; a.last_h = s->view.view_h;

@@ -48,7 +48,6 @@ final class RgdModule implements Module {
             Log.w(TAG, "disabled on unsupported G24 cluster");
             return true;
         }
-        com.luka.carplay.rgd.NativeArrows.refresh();
         if (routeGuidanceDisabled()) {
             /* Report started so CarPlayApp stops retrying; do NOT engage the BAP
              * takeover, so stock route guidance is left alone and the cluster is

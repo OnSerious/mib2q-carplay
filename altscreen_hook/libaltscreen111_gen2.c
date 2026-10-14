@@ -122,11 +122,16 @@
  * the puck landed behind the bottom bar ("too low"). The band between the bars
  * and the dials keeps it where the stock puck sits (~row 350). Override at runtime
  * with /mnt/app/root/mibr-carplay111-safearea.conf (GEM menu / altscreen_safearea).
+ *
+ * Height 270, not the reference 297: on the car (A5, Q7) Google Maps puts its
+ * wordmark at the SafeArea's bottom edge and with 297 the wordmark ran ~20 px into
+ * the VC bottom bar (issue #9 photo). 270 ends the SafeArea at canvas row 357, a
+ * few px of clearance above the bar; the puck moves up by half of that.
  */
 #define ALT111_DEFAULT_SAFE_X 360
 #define ALT111_DEFAULT_SAFE_Y 87
 #define ALT111_DEFAULT_SAFE_W 720
-#define ALT111_DEFAULT_SAFE_H 297
+#define ALT111_DEFAULT_SAFE_H 270
 /*
  * Second ViewArea: VC "classic" layout (big dials, small map window between
  * them). From a photo of the stock small map, scaled by the top info bar (same
@@ -138,7 +143,7 @@
 #define ALT111_DEFAULT_SMALL_SAFE_X 520
 #define ALT111_DEFAULT_SMALL_SAFE_Y 87
 #define ALT111_DEFAULT_SMALL_SAFE_W 400
-#define ALT111_DEFAULT_SMALL_SAFE_H 297
+#define ALT111_DEFAULT_SMALL_SAFE_H 270   /* same bottom edge as the wide view */
 #else
 #define ALT111_TARGET_NAME "mu1440"
 #define ALT111_DEFAULT_PORT 6031
@@ -176,6 +181,15 @@ typedef void *AirPlayReceiverSessionRef;
 #define ALT_URL_DEFAULT  "maps:/car/instrumentcluster"
 #define ALT_URL_MAP      "maps:/car/instrumentcluster/map"
 #define ALT_URL_INSTRUCTIONCARD "maps:/car/instrumentcluster/instructioncard"
+/*
+ * Default URLs follow the guidance source (ported from luka-dev/mib2q-carplay-rgi,
+ * car-verified there).  RGI on: our BAP/KDK path draws the maneuver, ETA and lanes,
+ * so ask for the bare map; the root URL is "anyContent" and Maps kept its turn card
+ * there even with showETA=no.  RGI off (Waze, or no route): map plus the app's own
+ * turn card and ETA, so guidance still reaches the cluster.
+ */
+#define ALT_URL_RGI_ON   "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
+#define ALT_URL_RGI_OFF  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
 #define AIRPLAY_FEATURE_BIT26 (1ULL << 26)
 
 /* Opaque storage. Stock AES_CTR_Context is smaller than this on the target. */
@@ -366,6 +380,8 @@ static const char *g_nav_eta_path = "/mnt/app/root/mibr-carplay111-nav.showETA";
 static const char *g_nav_speed_path = "/mnt/app/root/mibr-carplay111-nav.showSpeedLimit";
 static const char *g_nav_compass_path = "/mnt/app/root/mibr-carplay111-nav.showCompass";
 static const char *g_nav_maneuver_path = "/mnt/app/root/mibr-carplay111-nav.maneuverLayout";
+/* Present => historic bare URL instead of the guidance-source URLs (rollback). */
+static const char *g_rgi_url_disable_marker = "/mnt/app/root/mibr-carplay111-rgi-url.disabled";
 /*
  * Stream-111 data-port override, re-read at every SETUP.
  *
@@ -420,6 +436,11 @@ static unsigned g2_command_ready;
 /* Net steering-wheel MapScale steps still to send as changeMapZoomLevel
  * (sign as received from the VC roller). Guarded by g2_core_lock. */
 static int g2_zoom_pending;
+/* Java's confirmed route-guidance presentation (CMD_ALT_RGI via libcarplay_hook).
+ * Written by the bus thread, read by every URL builder: a plain volatile int.
+ * g2_rgi_url_pending (guarded by g2_core_lock) asks the worker for a fresh showUI. */
+static volatile int g2_rgi_on;
+static int g2_rgi_url_pending;
 static pthread_t g2_control_thread;
 static pthread_t g2_output_thread;
 static int g2_workers_started;
@@ -857,6 +878,19 @@ static void nav_maneuver_value(char *out, size_t cap)
     out[0] = '\0';
 }
 
+/* The guidance-source URLs apply unless any explicit URL override or the rollback
+ * marker is present; every existing A/B switch keeps priority. */
+static int rgi_url_policy_applies(void)
+{
+    char v[32];
+    if (access(g_rgi_url_disable_marker, F_OK) == 0) return 0;
+    if (read_trimmed_value(g_url_mode_path, v, sizeof(v)) == 0) return 0;
+    if (read_trimmed_value(g_nav_surface_path, v, sizeof(v)) == 0) return 0;
+    if (access(g_url_map_marker, F_OK) == 0) return 0;
+    if (access(g_nav_query_enable_marker, F_OK) == 0) return 0;
+    return strcmp(g_alt_url, ALT_URL_DEFAULT) == 0;
+}
+
 static void active_alt_url_copy(char *out, size_t cap)
 {
     char surface[24];
@@ -865,6 +899,10 @@ static void active_alt_url_copy(char *out, size_t cap)
 
     if (!out || cap == 0u) return;
     out[0] = '\0';
+    if (rgi_url_policy_applies()) {
+        snprintf(out, cap, "%s", g2_rgi_on ? ALT_URL_RGI_ON : ALT_URL_RGI_OFF);
+        return;
+    }
     base = nav_surface_url(surface, sizeof(surface));
 
     /*
@@ -2946,6 +2984,38 @@ int altscreen111_view_area(int view)
     return rc;
 }
 
+/*
+ * Exported for libcarplay_hook's CMD_ALT_RGI handler: Java confirmed (1) or withdrew (0)
+ * its own route-guidance presentation.  The default cluster URL follows it; on a change
+ * with a stream-111 session up the worker re-sends showUI.  Never blocks the bus thread.
+ */
+int altscreen111_set_rgi(int on)
+{
+    int queued = 0;
+    on = on ? 1 : 0;
+    if (g2_rgi_on == on) return 0;
+    g2_rgi_on = on;
+    pthread_mutex_lock(&g2_core_lock);
+    if (g2_command_ready) { g2_rgi_url_pending = 1; queued = 1; }
+    pthread_cond_broadcast(&g2_core_cv);
+    pthread_mutex_unlock(&g2_core_lock);
+    logf_u2("gen2 route guidance %s -> cluster URL %s%s", on ? "on" : "off",
+            rgi_url_policy_applies() ? (on ? "map only" : "map + app cards") : "unchanged (URL override)",
+            queued ? ", showUI queued" : "");
+    return 0;
+}
+
+static void gen2_process_rgi_url(void)
+{
+    int pending;
+    pthread_mutex_lock(&g2_core_lock);
+    pending = g2_rgi_url_pending;
+    g2_rgi_url_pending = 0;
+    pthread_mutex_unlock(&g2_core_lock);
+    if (pending && rgi_url_policy_applies())
+        gen2_dispatch_diag_command("showUI", command_showui());
+}
+
 /* One queued step per worker pass, so a fast roller spin cannot burst the phone. */
 static void gen2_process_map_zoom(void)
 {
@@ -3070,7 +3140,7 @@ static void gen2_set_command_ready(unsigned ready)
 {
     pthread_mutex_lock(&g2_core_lock);
     g2_command_ready = ready ? 1u : 0u;
-    if(!ready) g2_zoom_pending = 0;
+    if(!ready){ g2_zoom_pending = 0; g2_rgi_url_pending = 0; }
     pthread_cond_broadcast(&g2_core_cv);
     pthread_mutex_unlock(&g2_core_lock);
     gen2_publish_status();
@@ -3436,6 +3506,7 @@ static void *gen2_control_worker(void *arg)
         gen2_resync_poll();
         gen2_process_diag_markers();
         gen2_process_map_zoom();
+        gen2_process_rgi_url();
 
         if(access(g2_reacquire_marker,F_OK)==0){
             unlink(g2_reacquire_marker);

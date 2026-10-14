@@ -38,15 +38,22 @@ CarPlay or Android Auto automatically.
 - **Route text in the Virtual Cockpit.** Shows the next road or exit sign. Press **OK**
   on the steering wheel to toggle arrival time and time left.
 - **Head-up display.** The same maneuver icons, lanes and distance.
-- **Native Audi arrows (optional).** `native_arrows_on` lets the Virtual Cockpit draw its
-  own Audi maneuver arrows instead of the custom 3D arrow (roundabout exit number included,
-  "follow road" until the next turn is close). Not every VC supports it: on an Audi Q7 the
-  box stays empty, so the 3D arrow is the default; `native_arrows_off` switches back.
+- **CarPlay calls on the cluster phone tab.** Caller, call state and timer, accept / hang up,
+  hold, mute and dialling (tab or steering wheel), recents, favorites, missed calls, signal
+  and carrier, instead of the stock "Your iPhone is in Apple CarPlay mode" note. The HU phone
+  app goes straight to CarPlay. See [`docs/hook/phone-and-vehicle.md`](docs/hook/phone-and-vehicle.md).
+- **Car data to the iPhone.** Wheel speed, range, outside temperature and the low-fuel warning,
+  for apps that use them. Set the engine type with one word (`gasoline`, `diesel`, `electric`,
+  `cng`) in `/mnt/app/root/carplay_vehicle_engine` (default gasoline).
+- **Siri on a short press (opt-in).** The steering-wheel voice key opens Siri on a short press
+  too while CarPlay is connected (menu: *Siri on short voice-key press*); off by default.
 - **Cover art** on the cluster media screen.
 - **Parking popups no longer hide CarPlay** (front PDC view).
 - **MMI touchpad → D-pad** so drags navigate CarPlay menus (can be switched off: then
   the touchpad goes to CarPlay the stock way).
-- **AltScreen (optional, experimental).** The CarPlay map video on the cluster.
+- **AltScreen (optional, experimental).** The CarPlay map video on the cluster. With an
+  app that sends route guidance the cluster draws the maneuver itself and the phone streams
+  the bare map; with Waze the phone draws its own turn card and ETA into the cluster map.
   Status and open issues are in
   [`docs/deploy/altscreen-mhi2q.md`](docs/deploy/altscreen-mhi2q.md).
 - **Android Auto.** The Google Maps / Waze map video on the cluster (following the Large,
@@ -224,7 +231,6 @@ The manual SSH install, the exact config edits and the verification steps are in
 | `rgd_enable_…` / `rgd_disable_…` | turn route guidance on/off at runtime |
 | `aa_cluster_on_…` / `aa_cluster_off_…` | turn the Android Auto cluster map on/off (applies on the next phone connect) |
 | `touchpad_dpad_on_…` / `touchpad_dpad_off_…` | MMI touchpad as CarPlay D-pad on/off; off = stock touchpad input (next CarPlay connect) |
-| `native_arrows_on_…` / `native_arrows_off_…` | native Audi VC maneuver arrows (opt-in); off = custom 3D arrow, the default (next phone connect) |
 | `altscreen_on_…` / `altscreen_off_…` | turn the AltScreen advertisement on/off (applies on the next phone connect) |
 | `altscreen_grid_…` | toggle the calibration grid over the cluster video |
 | `altscreen_safearea_…` | apply a custom AltScreen SafeArea from the card |
@@ -250,8 +256,10 @@ Its buttons run byte-identical copies of the M.I.B. mods, stored on the unit in
 | Classic-view SafeArea ON / OFF | toggle between two ViewAreas (wide + classic) and a single wide one (next CarPlay connect) | no |
 | Re-request cluster map | re-send the cluster request in the running session so iOS picks the map app again (test) | no |
 | HW decoder ON / OFF | toggle hardware H.264 decode for the cluster video (default ON; next CarPlay connect) | no |
+| HW decoder 2-min delayed start ON / OFF | CarPlay decodes in software for the first 2 minutes after an MMI start, then switches to hardware (default OFF: hardware at once). Turn on if the MMI freezes when CarPlay connects right after a start | no |
 | Android Auto cluster map ON / OFF | Android Auto cluster map on/off (next phone connect) | no |
 | Android Auto cluster day/night ON / OFF | opt-in, experimental: the Android Auto cluster map follows the MMI day/night design instead of always dark (applies live) | no |
+| Siri on short voice-key press ON / OFF | opt-in: with CarPlay connected a short press of the wheel voice key opens Siri instead of the car's voice control (default OFF; applies at once) | no |
 | Touchpad as D-pad ON / OFF | MMI touchpad as CarPlay D-pad, or stock touchpad input (next CarPlay connect) | no |
 | HW decoder probe (OMX) | log the OMX decoder's requirements to `/tmp/altscreen_render.log` (diagnostics only) | no |
 | Copy stock lsd.jxe to SD | extract_lsd mod | yes |
@@ -333,7 +341,9 @@ This repository combines and builds on the work of others:
 
 - **[luka-dev/mib2q-carplay-rgi](https://github.com/luka-dev/mib2q-carplay-rgi)** by
   LuKa (@LuKa_dev) is the base of this project: the hook, Java patch, maneuver
-  renderer, installer and most of the knowledge base.
+  renderer, installer and most of the knowledge base. Release 1.2 also ports from it the
+  cluster phone tab, vehicle data to the iPhone, Siri on a short press, the cluster-URL
+  switch by guidance source, the NAVSD init-state guard and several route-guidance fixes.
 - **[wasimlhr/mib2q-android-auto-cluster](https://github.com/wasimlhr/mib2q-android-auto-cluster)**
   is the source of the Android Auto support: the gal receiver hook, navigation
   translation, layouts and the Java adapter (GPL-3.0-or-later). Its receiver hook adapts

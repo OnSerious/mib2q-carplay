@@ -23,9 +23,11 @@ DEFINE_LOG_MODULE(ALTZOOM);
 
 typedef int (*altscreen_map_zoom_fn)(int mapscale_steps);
 typedef int (*altscreen_view_area_fn)(int view);
+typedef int (*altscreen_set_rgi_fn)(int on);
 
 static altscreen_map_zoom_fn g_map_zoom;
 static altscreen_view_area_fn g_view_area;
+static altscreen_set_rgi_fn g_set_rgi;
 static int g_resolved;
 static int g_missing_logged;
 
@@ -34,6 +36,7 @@ static void resolve(void) {
     if (g_resolved) return;
     g_map_zoom = (altscreen_map_zoom_fn)dlsym(RTLD_DEFAULT, "altscreen111_map_zoom");
     g_view_area = (altscreen_view_area_fn)dlsym(RTLD_DEFAULT, "altscreen111_view_area");
+    g_set_rgi = (altscreen_set_rgi_fn)dlsym(RTLD_DEFAULT, "altscreen111_set_rgi");
     g_resolved = 1;
 }
 
@@ -75,14 +78,28 @@ static void on_alt_zone(uint16_t type, uint8_t flags, const uint8_t* payload,
     LOG_INFO(LOG_MODULE, "CMD_ALT_ZONE mode=%u -> view area %d rc=%d", payload[0], view, g_view_area(view));
 }
 
+/* CMD_ALT_RGI [u8 0=off 1=on]: Java's confirmed route-guidance presentation. The AltScreen
+ * hook picks the cluster URL from it: bare map while our BAP/KDK path draws the guidance,
+ * map + the app's own cards otherwise (Waze, or no route). */
+static void on_alt_rgi(uint16_t type, uint8_t flags, const uint8_t* payload,
+                       uint32_t len, void* ctx) {
+    (void)type; (void)flags; (void)ctx;
+    if (!payload || len < 1) return;
+    resolve();
+    if (!g_set_rgi) return;   /* base install: no AltScreen, nothing to switch */
+    LOG_INFO(LOG_MODULE, "CMD_ALT_RGI %u rc=%d", payload[0], g_set_rgi(payload[0] ? 1 : 0));
+}
+
 static void altzoom_init(void) {
     bus_on(CMD_ALT_ZOOM, on_alt_zoom, NULL);
     bus_on(CMD_ALT_ZONE, on_alt_zone, NULL);
+    bus_on(CMD_ALT_RGI, on_alt_rgi, NULL);
 }
 
 static void altzoom_shutdown(void) {
     bus_off(CMD_ALT_ZOOM);
     bus_off(CMD_ALT_ZONE);
+    bus_off(CMD_ALT_RGI);
 }
 
 const hook_module_def_t altzoom_module_def = {

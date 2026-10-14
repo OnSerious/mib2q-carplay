@@ -136,6 +136,37 @@ case $ACT in
             echo "DONE. Hardware decoder OFF (software decode) from the next CarPlay connection."
         fi
         ;;
+    hwdelay)
+        # CarPlay starts on the hardware decoder at once (no switch, no blink). This marker
+        # brings back the 2-minute wait after an MMI start (software decode until then),
+        # for units that freeze when the decoder opens early (issue #10). Android Auto always
+        # waits (issue #14). Read per CarPlay connection.
+        M=/mnt/app/root/altscreen_render.hwdecode.delayed
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. CarPlay hardware decoder starts at once (default) from the next connection."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. CarPlay hardware decoder waits 2 minutes after an MMI start (software until then)."
+        fi
+        ;;
+    siri_short)
+        # Opt-in: with CarPlay connected, a short press of the steering-wheel voice key opens
+        # Siri instead of the car's own voice control (the long press always opens Siri).
+        # Read on every key press, so it applies at once.
+        M=/mnt/app/carplay_siri_short.on
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. Short voice-key press: car voice control (default). Long press: Siri."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. Short voice-key press: Siri while CarPlay is connected."
+        fi
+        ;;
     aa_daynight)
         # Opt-in: the Android Auto cluster map follows the MMI day/night design (Light by
         # day, Dark by night) instead of always Dark. Experimental: upstream saw Light crash
@@ -168,7 +199,7 @@ case $ACT in
         echo "DONE. Probe requested; altscreen_render runs it within ~1 s."
         echo "Then press 'Save logs to SD' and send altscreen_render.log."
         ;;
-    uninstall|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|touchpad_dpad_on|touchpad_dpad_off|native_arrows_on|native_arrows_off)
+    uninstall|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|touchpad_dpad_on|touchpad_dpad_off)
         run_action "$ACT"
         ;;
     remove_menu)
@@ -183,7 +214,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|native_arrows_on|native_arrows_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac

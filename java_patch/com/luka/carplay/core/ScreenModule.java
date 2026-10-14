@@ -25,6 +25,7 @@
  */
 package com.luka.carplay.core;
 
+import com.luka.carplay.bus.CarplayBus;
 import com.luka.carplay.framework.Log;
 
 import de.audi.atip.hmi.view.IDisplayManager;
@@ -86,8 +87,7 @@ public final class ScreenModule implements Module {
     private static int currentCtx = -1;
     private static volatile boolean connected = false;
     private static volatile boolean navActive = false;
-    /* A phone route owns BAP route guidance.  Same as navActive in 3D-arrow mode; with the
-     * native VC arrows navActive stays false (no overlay context) while this is true. */
+    /* A phone route owns BAP route guidance (published together with navActive). */
     private static volatile boolean routeGuidanceActive = false;
     private static volatile boolean altScreenActive = false;   /* altscreen_render live video */
     private static boolean navHidePending;
@@ -109,9 +109,29 @@ public final class ScreenModule implements Module {
             } else {
                 desiredCtx = CTX_STOCK_CLUSTER;
             }
+            sendRgiStateLocked();
             LOCK.notifyAll();
         }
     }
+
+    /** Mirror the confirmed RGI presentation to the CarPlay hook; the AltScreen hook picks the
+     *  Maps cluster URL from it: the app's own turn card + ETA while our BAP/KDK presentation is
+     *  idle (Waze, no route), the bare map once it is live, so guidance never shows twice.
+     *  Caller holds LOCK so edges cannot reorder; CarplayBus.sendBinary only enqueues.  The hook
+     *  ignores repeats.  Re-sent on the hook's hello, since a respawned hook starts at "off".
+     *  (Ported from luka-dev/mib2q-carplay-rgi AltScreenModule.) */
+    private static boolean sendRgiStateLocked() {
+        if (!CarPlayApp.isActive()) return false;      /* Android Auto has no stream 111 */
+        boolean rgi = connected && navActive;
+        return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_ALT_RGI,
+            new byte[] { (byte) (rgi ? 1 : 0) });
+    }
+
+    private static final CarplayBus.Listener HELLO_LISTENER = new CarplayBus.Listener() {
+        public void onFrame(int type, int flags, byte[] payload, int len) {
+            synchronized (LOCK) { sendRgiStateLocked(); }
+        }
+    };
 
     /** Fed by AltScreenModule from altscreen_render's liveness signal. When the
      *  CarPlay video plane (99) is producing frames the cluster switches to the
@@ -121,6 +141,8 @@ public final class ScreenModule implements Module {
         if (altScreenActive == active) return;
         altScreenActive = active;
         Log.i(TAG, "altScreen video " + (active ? "live -> ctx 81/82" : "stopped -> ctx 74/80"));
+        /* Stock NAVSD INITIALIZING must not cover the phone video on plane 99. */
+        ScreenNavStatusGate.setAltScreenActive(active);
         republish();
     }
 
@@ -269,7 +291,10 @@ public final class ScreenModule implements Module {
             altScreenActive = false;
             navHidePending = false;
             desiredCtx = CTX_STOCK_CLUSTER;
+            sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
+        ScreenNavStatusGate.setAltScreenActive(false);
+        CarplayBus.getInstance().on(CarplayBus.EVT_HELLO, HELLO_LISTENER);
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
              * Assign the field ONLY after start() succeeds so a throw leaves worker==null for retry. */
@@ -298,6 +323,8 @@ public final class ScreenModule implements Module {
             altScreenActive = false;
             navHidePending = false;
         }
+        CarplayBus.getInstance().off(CarplayBus.EVT_HELLO);
+        ScreenNavStatusGate.setAltScreenActive(false);
         republish();
     }
 

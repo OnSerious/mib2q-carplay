@@ -705,12 +705,6 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
                 );
         }
 
-        if (flag && com.luka.carplay.rgd.NativeArrows.isKdkSuppressed()) {
-            /* Native VC arrows (issue #3): the KDK would cover the VC's own maneuver icon. */
-            this.logChannel.log(1000000, "ClusterService#setSupplementaryMap() - KDK kept hidden for native VC arrows");
-            flag = false;
-        }
-
         this.setKDKVisibility(flag);
     }
 

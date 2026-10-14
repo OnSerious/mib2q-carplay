@@ -14,11 +14,15 @@
 #include "routeguidance/rgd_hook.h"
 #include "coverart/coverart_hook.h"
 #include "altzoom/altzoom_hook.h"
+#include "telephony/tel_hook.h"
+#include "vehicle/vehicle_hook.h"
 
 const hook_module_def_t* const hook_module_table[] = {
     &rgd_module_def,
     &coverart_module_def,
     &altzoom_module_def,
+    &tel_module_def,
+    &vehicle_module_def,
 };
 
 const size_t hook_module_table_count =

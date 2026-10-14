@@ -27,26 +27,26 @@ altscreen_on|altscreen_on|Cluster video (AltScreen) ON
 altscreen_off|altscreen_off|Cluster video (AltScreen) OFF
 rgd_enable|rgd_enable|Route guidance ON
 rgd_disable|rgd_disable|Route guidance OFF
-native_arrows_on|native_arrows_on|Native Audi VC arrows ON (opt-in)
-native_arrows_off|native_arrows_off|Native Audi VC arrows OFF (3D arrow, default)
 grid|grid|Calibration grid ON / OFF (toggle)
 safearea|safearea|Apply SafeArea from SD (carplay_safearea*.conf)
 safearea_reset|safearea_reset|Reset SafeArea to built-in
 singleview|singleview|Classic-view SafeArea ON / OFF (2 ViewAreas)
 reacquire|reacquire|Re-request cluster map (test app switching)
 hwdec|hwdec|HW decoder ON / OFF (toggle, default ON)
+hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default OFF)
 aa_cluster_on|aa_cluster_on|Android Auto cluster map ON
 aa_cluster_off|aa_cluster_off|Android Auto cluster map OFF
 aa_daynight|aa_daynight|Android Auto cluster day/night ON / OFF (toggle, opt-in, test)
 touchpad_dpad_on|touchpad_dpad_on|Touchpad as D-pad ON (CarPlay, default)
 touchpad_dpad_off|touchpad_dpad_off|Touchpad as D-pad OFF (stock touchpad)
+siri_short|siri_short|Siri on short voice-key press ON / OFF (toggle, CarPlay, default OFF)
 omxprobe|omxprobe|HW decoder probe (OMX, logs only)
 lsd|lsd|Copy stock lsd.jxe to SD
 uninstall|uninstall|Uninstall CarPlay (restore stock)
 remove_menu|remove_menu|Remove this menu
 "
 # mod folders bundled as actions/<name>/custom.sh
-ACTIONS="install uninstall logging extract_lsd altscreen_on altscreen_off rgd_enable rgd_disable altscreen_grid altscreen_safearea aa_cluster_on aa_cluster_off touchpad_dpad_on touchpad_dpad_off native_arrows_on native_arrows_off"
+ACTIONS="install uninstall logging extract_lsd altscreen_on altscreen_off rgd_enable rgd_disable altscreen_grid altscreen_safearea aa_cluster_on aa_cluster_off touchpad_dpad_on touchpad_dpad_off"
 
 echo "=== GEM menu: staging $OUT ==="
 rm -rf "$OUT"

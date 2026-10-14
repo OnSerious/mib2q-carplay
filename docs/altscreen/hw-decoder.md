@@ -83,7 +83,10 @@ Hung video hardware (issue #14):
 
 - **Boot settle time.** No hardware decoder before 120 s of uptime (`ALTR_HW_MIN_UPTIME_S`).
   A session that starts earlier decodes in software, then reconnects to the tee once at 120 s
-  and switches to hardware. `.live` is refreshed for up to 3 s until the first hardware picture,
+  and switches to hardware. Always for **Android Auto** (#14). **CarPlay** starts on hardware at
+  once, like upstream mib2q-carplay-rgi (no switch, so no blink); the marker
+  `/mnt/app/root/altscreen_render.hwdecode.delayed` (GEM *HW decoder 2-min delayed start*) gives
+  it the wait, for units that freeze when the decoder opens early (#10, cause not proven). `.live` is refreshed for up to 3 s until the first hardware picture,
   also while the decoder setup blocks (from the watchdog thread), so the cockpit does not flip
   back to the Audi map (issue #9: it showed for ~0.3 s while `.live` aged past Java's 1 s limit).
 - **Wedged decoder.** A state change that times out, or an OMX `Timeout` / `Hardware` error,
@@ -91,6 +94,14 @@ Hung video hardware (issue #14):
   The renderer switches hardware decode OFF and exits; the restarted renderer uses software.
 - **Watchdog.** Setup (10 s), teardown (8 s) and each feed (4 s) have a deadline. An OMX call
   that is still blocked after it switches hardware decode OFF and exits the process.
+- **Bounded starts (cooldown).** The checks above only catch failures the renderer lives to see.
+  A renderer that crashes inside the decoder start, or before the first picture, would be
+  restarted by `carplay_monitor.sh` and try hardware again, and each failed `OMX_GetHandle` can
+  hold a decoder slot that `dio_manager`'s own decoder needs. `/tmp/altscreen_render[.aa].hwdecode.off.starts`
+  counts starts with no picture and no clean close: after 3 the hardware waits 30 s (software
+  meanwhile, then the boot-settle reconnect), after another 3 it stays off for this boot. A
+  first picture or a clean close clears the record. Idea from luka-dev/mib2q-carplay-rgi
+  (`sink_omx_qnx.c`, 3 failures / 30 s).
 
 ## Plan
 

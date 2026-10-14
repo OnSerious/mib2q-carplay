@@ -46,13 +46,15 @@ public final class CarPlayApp {
      * feeds it the cluster-video liveness that selects cluster ctx 81/82 (CarPlay
      * AltScreen or the Android Auto cluster display; one renderer serves both). */
     private static final Module[] MODULES = new Module[] {
-        new ScreenModule(), new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule()
+        new ScreenModule(), new AltScreenModule(), new RgdModule(), new SteeringWheelInputModule(),
+        new VehicleDataModule()
     };
     /* Sessions each module runs for, parallel to MODULES.  The roller-press module is
      * CarPlay-only: the patched CarPlay key controller swallows the collapsed DDS_SELECT
-     * that the same press also produces, Android Auto's controller does not. */
+     * that the same press also produces, Android Auto's controller does not.  Vehicle data
+     * goes to the iPhone through the CarPlay hook (iAP2), so it is CarPlay-only too. */
     private static final int[] MODULE_OWNERS = new int[] {
-        OWNER_ANY, OWNER_ANY, OWNER_ANY, OWNER_CARPLAY
+        OWNER_ANY, OWNER_ANY, OWNER_ANY, OWNER_CARPLAY, OWNER_CARPLAY
     };
 
     private static final Object lock = new Object();

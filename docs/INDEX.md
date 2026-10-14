@@ -19,6 +19,7 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 - [bus-protocol](hook/bus-protocol.md) - localhost TCP :19810, sticky event/command frames, fd/generation lifecycle, signal policy
 - [cover-art](hook/cover-art.md) - iAP2 artwork file-transfer reassembly, bounded decode on a worker -> VC picture
 - [integration-seam](hook/integration-seam.md) - what LD_PRELOAD interposes vs stays stock (5-symbol export allowlist); NME injection ABI; hardening
+- [phone-and-vehicle](hook/phone-and-vehicle.md) - CarPlay calls on the VC phone tab, vehicle data to the iPhone, Siri short press (ported from mib2q-carplay-rgi)
 
 ## 🧭 Route guidance - RGD -> BAP  [x]
 - [rgd-tlv](rgd/rgd-tlv.md) - iAP2 RouteGuidanceUpdate TLV map (0x5200-0x5204), whole-message validation, route_generation
@@ -35,7 +36,7 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 - [compositing](cluster/compositing.md) - maneuver overlay over native map, HU->MOST->VC H.264
 - [maneuver-renderer](cluster/maneuver-renderer.md) - :19800 protocol, C++ scene engine, visible area, watchdog
 - [kdk-geometry](cluster/kdk-geometry.md) - KDK backings 101/102, VC Fct44/Fct54-driven visibility & stage, HU geometry table
-- [native-arrows](cluster/native-arrows.md) - default (3D arrow opt-in): KDK hidden, VC draws its own Audi arrows from FctID 23
+- [native-arrows](cluster/native-arrows.md) - abandoned: hiding the KDK does not make the VC draw its own arrows (removed, why)
 
 ## 🤖 Android Auto  [x]
 - [overview](android-auto/overview.md) - what works without / with the gal hook, topology, Java bridge, cluster map, switches, logs

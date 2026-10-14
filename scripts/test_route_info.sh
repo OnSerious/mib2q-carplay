@@ -31,7 +31,9 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_LIBS"
     "$PROJECT_DIR/tests/ClusterKdkRendererLifecycleTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceTransportTest.java" \
     "$PROJECT_DIR/tests/LaneGuidanceLifecycleTest.java" \
-    "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java"     "$PROJECT_DIR/tests/NativeArrowsTest.java" \
+    "$PROJECT_DIR/tests/RgiDeliveryRecoveryTest.java"     "$PROJECT_DIR/tests/FollowStreetTest.java" \
+    "$PROJECT_DIR/tests/RouteGenerationFuzzTest.java" "$PROJECT_DIR/tests/BapShutdownFailureTest.java" \
+    "$PROJECT_DIR/tests/ManeuverFieldArrivalTest.java" "$PROJECT_DIR/tests/RendererRerouteTransportTest.java" \
     "$PROJECT_DIR/tests/RendererMapperDirectionTest.java"
 # No checkout resources or font files are visible through the working directory.
 # The pure runtime uses only classes and the embedded data in the built JAR.
@@ -58,7 +60,11 @@ CLASSPATH="$PATCH_JAR:$STOCK_JAR:$OSGI_LIBS"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceTransportTest "$PROJECT_DIR/build/lane-guidance-wire.bin"
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.LaneGuidanceLifecycleTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RgiDeliveryRecoveryTest
-"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.NativeArrowsTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.FollowStreetTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" RouteGenerationFuzzTest 0x5eed 20000
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.BapShutdownFailureTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.ManeuverFieldArrivalTest
+"$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RendererRerouteTransportTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.CurrentPositionDeliveryTest
 "$JDK_DIR/bin/java" -Xverify:none -cp "$TEST_DIR:$CLASSPATH" com.luka.carplay.rgd.RouteInfoTimeoutTest
 "$JDK_DIR/bin/java" -Xverify:none \

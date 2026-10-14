@@ -5,7 +5,7 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
-/** NAVSD INITIALIZING/READY must pass straight through the RGI gate. */
+/** Regression coverage for the cold-boot NAVSD INITIALIZING takeover. */
 public final class GatedCombiServiceInitStateTest {
     private static final class Recorder implements InvocationHandler {
         int showCount;
@@ -40,13 +40,54 @@ public final class GatedCombiServiceInitStateTest {
         require(recorder.hideCount == 1, "stock hide must pass before takeover");
     }
 
-    // Dropped from reference: testDeferredInitializingRestored, testDeferredReadyRestored,
-    // testIdempotentTakeoverAndNoEdgeRelease. They cover setAltScreenTakeover (cold-boot NAVSD
-    // INITIALIZING takeover for the altscreen video plane); the RGI-only fork keeps the stock
-    // map and deliberately has no takeover, so INITIALIZING/READY always pass straight through.
+    private static void testDeferredInitializingRestored() {
+        Recorder recorder = new Recorder();
+        GatedCombiService gate = new GatedCombiService(recorder.service());
+
+        gate.showInitializingScreen();
+        gate.setAltScreenTakeover(true);
+        require(recorder.showCount == 1, "takeover must not emit another show");
+        require(recorder.hideCount == 1, "takeover must clear pre-existing INITIALIZING");
+
+        gate.showInitializingScreen();
+        require(recorder.showCount == 1, "stock INITIALIZING must be deferred during takeover");
+
+        gate.setAltScreenTakeover(false);
+        require(recorder.showCount == 2, "release must restore deferred INITIALIZING");
+    }
+
+    private static void testDeferredReadyRestored() {
+        Recorder recorder = new Recorder();
+        GatedCombiService gate = new GatedCombiService(recorder.service());
+
+        gate.setAltScreenTakeover(true);
+        require(recorder.hideCount == 1, "takeover must assert READY once");
+        gate.showInitializingScreen();
+        gate.hideInitializingScreen();
+        require(recorder.showCount == 0, "crossing stock show must remain hidden");
+        require(recorder.hideCount == 2, "stock READY must be reasserted during takeover");
+
+        gate.setAltScreenTakeover(false);
+        require(recorder.hideCount == 3, "release must restore latest deferred READY");
+    }
+
+    private static void testIdempotentTakeoverAndNoEdgeRelease() {
+        Recorder recorder = new Recorder();
+        GatedCombiService gate = new GatedCombiService(recorder.service());
+
+        gate.setAltScreenTakeover(true);
+        gate.setAltScreenTakeover(true);
+        require(recorder.hideCount == 1, "duplicate takeover must not resend READY");
+        gate.setAltScreenTakeover(false);
+        require(recorder.hideCount == 1 && recorder.showCount == 0,
+            "no-edge release is recomputed by ClusterService, not guessed by the wrapper");
+    }
 
     public static void main(String[] args) {
         testStockForwarding();
+        testDeferredInitializingRestored();
+        testDeferredReadyRestored();
+        testIdempotentTakeoverAndNoEdgeRelease();
         System.out.println("GatedCombiService init-state tests: PASS");
     }
 }

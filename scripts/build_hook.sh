@@ -48,7 +48,7 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   SRCS="framework/logging.c framework/state_trace.c framework/signal_guard.c framework/bus.c \
         framework/iap2_protocol.c framework/hook_framework.c \
         routeguidance/rgd_tlv.c routeguidance/rgd_hook.c coverart/jpeg_safety.c coverart/coverart_stream.c coverart/coverart_hook.c \
-        altzoom/altzoom_hook.c \
+        altzoom/altzoom_hook.c telephony/tel_hook.c vehicle/vehicle_hook.c \
         main.c"
   $CC -shared -fPIC -O2 -std=gnu99 -fvisibility=hidden -fdata-sections -ffunction-sections '"$CFLAGS_EXTRA"' \
       -I. $SRCS -o /src/build/libcarplay_hook.so -Wl,--gc-sections \
@@ -57,14 +57,17 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   # the version script, checked against what actually landed in .dynsym.
   awk "/global:/{g=1;next} /local:/{g=0} g{gsub(/[;[:space:]]/,\"\"); if(length) print}" \
       /src/hook/carplay_hook.exports.map | sort > /tmp/exports_expected
-  $NM -D --defined-only /src/build/libcarplay_hook.so | awk "NF >= 3 { print \$3 }" | sort > /tmp/exports_actual
+  # nm reads a container-local copy: on some bind mounts (Docker Desktop on Windows)
+  # it cannot read the file in place and both checks would fail or pass blindly.
+  cp /src/build/libcarplay_hook.so /tmp/check_hook.so
+  $NM -D --defined-only /tmp/check_hook.so | awk "NF >= 3 { print \$3 }" | sort > /tmp/exports_actual
   diff -u /tmp/exports_expected /tmp/exports_actual || { echo "REJECTED: dynamic exports differ from the allowlist"; exit 1; }
   # emutls trap: the hook must never carry thread-local emutls (QNX 6.5 crash).
-  n=$($NM /src/build/libcarplay_hook.so 2>/dev/null | grep -ci emutls || true)
+  n=$($NM /tmp/check_hook.so | grep -ci emutls || true)
   [ "$n" = "0" ] || { echo "REJECTED: $n emutls symbols present"; exit 1; }
-  init_size=$($READELF -W -S /src/build/libcarplay_hook.so | awk "\$2 == \".init_array\" { print \$6 }")
+  init_size=$($READELF -W -S /tmp/check_hook.so | awk "\$2 == \".init_array\" { print \$6 }")
   [ "$init_size" = "000004" ] || { echo "REJECTED: .init_array size=$init_size (expected compiler-only 000004)"; exit 1; }
-  n=$($NM -an /src/build/libcarplay_hook.so | grep -cE "rgd_module_(init|fini)" || true)
+  n=$($NM -an /tmp/check_hook.so | grep -cE "rgd_module_(init|fini)" || true)
   [ "$n" = "0" ] || { echo "REJECTED: $n eager RGD constructor/destructor symbols"; exit 1; }
   echo "  built build/libcarplay_hook.so (emutls=0 init_array=compiler-only)"
 '

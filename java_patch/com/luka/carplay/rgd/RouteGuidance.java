@@ -780,11 +780,10 @@ public class RouteGuidance implements CarplayBus.Listener {
         return applied;
     }
 
-    /** Route presentation up/down for the cluster.  Native VC arrows keep stock ctx 74 (no
-     *  overlay over the VC's own icon), but the route is still active for the roller toggle. */
+    /** Route presentation up/down for the cluster. */
     private void publishNavActive(boolean active) {
         com.luka.carplay.core.ScreenModule.setRouteGuidanceActive(active);
-        com.luka.carplay.core.ScreenModule.setNavActive(active && (bap == null || !bap.isNativeArrows()));
+        com.luka.carplay.core.ScreenModule.setNavActive(active);
     }
 
     /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
@@ -831,6 +830,12 @@ public class RouteGuidance implements CarplayBus.Listener {
         // Keep failed HUD/renderer updates across subsequent distance-only deltas.
         if (d.has("route_generation")) {
             long generation = d.num64("route_generation", -1L);
+            if (generation >= 0L && state.routeGeneration >= 0L && generation < state.routeGeneration) {
+                // Native generations use a monotonic clock, including hook respawns. Drop the
+                // entire old frame before it can clear route authority, slots or pending dirty bits.
+                // A real disconnect resets state, allowing the next session's first generation.
+                return;
+            }
             if (generation >= 0L && generation != state.routeGeneration) {
                 // Native resets can be hidden by debounce and reuse every slot
                 // version. Reset content before applying this generation's fields,
