@@ -136,6 +136,23 @@ case $ACT in
             echo "DONE. Hardware decoder OFF (software decode) from the next CarPlay connection."
         fi
         ;;
+    aa_daynight)
+        # Opt-in: the Android Auto cluster map follows the MMI day/night design (Light by
+        # day, Dark by night) instead of always Dark. Experimental: upstream saw Light crash
+        # Android Auto on the phone. The gal hook checks the marker every 300 ms.
+        M=/mnt/app/root/aa_cluster.daynight
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. Android Auto cluster map always dark (default)."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. Android Auto cluster map follows MMI day/night (opt-in)."
+            echo "If Android Auto on the phone crashes, press this again to turn it off."
+        fi
+        echo "Applies within a second while connected, otherwise at the next phone connection."
+        ;;
     reacquire)
         # Test: re-send the cluster showUI in the running session, so iOS picks
         # which navigation app draws the VC map again (/tmp, consumed by the hook).
@@ -166,7 +183,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|touchpad_dpad_on|touchpad_dpad_off|native_arrows_on|native_arrows_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|native_arrows_on|native_arrows_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|omxprobe|remove_menu"
         exit 2
         ;;
 esac

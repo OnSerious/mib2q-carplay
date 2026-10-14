@@ -194,6 +194,7 @@ struct app {
     int hw_tried;             /* hardware attempted on this tee connection */
     int hw_deferred;          /* software decode only because of the boot settle time */
     uint64_t hw_min_uptime_ms;
+    uint64_t live_hold_until_ms;  /* planned switch to hardware: keep .live fresh until the first picture */
 #endif
 };
 
@@ -402,21 +403,27 @@ static pthread_mutex_t g_wd_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_wd_deadline_ms;     /* 0 = disarmed */
 static const struct source *g_wd_src;
 static const char *g_wd_what;
+static uint64_t g_wd_live_until_ms;  /* keep .live fresh while blocked in the call, until then */
 
 static void *wd_main(void *arg)
 {
     (void)arg;
     for (;;) {
-        uint64_t deadline;
+        uint64_t deadline, live_until, now;
         const struct source *s;
         const char *what;
         usleep(250000);
         pthread_mutex_lock(&g_wd_lock);
         deadline = g_wd_deadline_ms;
+        live_until = g_wd_live_until_ms;
         s = g_wd_src;
         what = g_wd_what;
         pthread_mutex_unlock(&g_wd_lock);
-        if (!deadline || now_ms() < deadline) continue;
+        now = now_ms();
+        /* Java drops ctx 81/82 when .live is >1 s old; decoder setup can take that
+         * long on the planned software -> hardware switch (issue #9: 0.3 s Audi map). */
+        if (deadline && now < live_until) set_live(1);
+        if (!deadline || now < deadline) continue;
         fprintf(stderr, "altscreen_render: %s hardware decoder blocked in %s; HW decoder switched OFF, "
                 "exiting for a clean restart\n", s->name, what);
         hw_switch_off(s);
@@ -427,7 +434,7 @@ static void *wd_main(void *arg)
     return NULL;
 }
 
-static void wd_arm(const struct source *s, const char *what, unsigned ms)
+static void wd_arm(const struct source *s, const char *what, unsigned ms, uint64_t live_until_ms)
 {
     static int started;
     if (!started) {
@@ -442,6 +449,7 @@ static void wd_arm(const struct source *s, const char *what, unsigned ms)
     pthread_mutex_lock(&g_wd_lock);
     g_wd_src = s;
     g_wd_what = what;
+    g_wd_live_until_ms = live_until_ms;
     g_wd_deadline_ms = now_ms() + ms;
     pthread_mutex_unlock(&g_wd_lock);
 }
@@ -458,6 +466,8 @@ static void wd_disarm(void)
 #define ALTR_WD_CREATE_MS  10000u
 #define ALTR_WD_DESTROY_MS 8000u
 #define ALTR_WD_FEED_MS    4000u
+/* Planned software -> hardware reconnect: .live stays fresh this long without a picture. */
+#define ALTR_UPGRADE_LIVE_HOLD_MS 3000u
 
 /* Close the hardware session. A decoder stuck in Executing keeps our buffers:
  * switch hardware decode OFF and exit, so carplay_monitor.sh restarts a clean
@@ -466,7 +476,7 @@ static void hw_close(struct app *a)
 {
     int rc;
     if (!a->hw) return;
-    wd_arm(a->src, "teardown", ALTR_WD_DESTROY_MS);
+    wd_arm(a->src, "teardown", ALTR_WD_DESTROY_MS, 0);
     rc = altr_hwdec_destroy(a->hw);
     wd_disarm();
     if (rc != 0) {
@@ -642,6 +652,7 @@ int main(void)
                 fprintf(stderr, "altscreen_render: boot settle time over; reconnecting %s for "
                         "hardware decode\n", s->name);
                 upgrade = 1;
+                a.live_hold_until_ms = now_ms() + ALTR_UPGRADE_LIVE_HOLD_MS;
                 break;
             }
 #endif
@@ -670,7 +681,8 @@ int main(void)
                         int stuck = 0;
                         a.hw_tried = 1;
                         gl_shutdown(&a);             /* frees displayable 99 for the decoder */
-                        wd_arm(s, "setup", ALTR_WD_CREATE_MS);
+                        if (a.live_hold_until_ms && now_ms() < a.live_hold_until_ms) set_live(1);
+                        wd_arm(s, "setup", ALTR_WD_CREATE_MS, a.live_hold_until_ms);
                         a.hw = altr_hwdec_create(&s->view, a.disp_id, &stuck);
                         wd_disarm();
                         a.hw_frames_seen = 0;
@@ -690,7 +702,7 @@ int main(void)
                 if (a.hw) {
                     uint64_t hf;
                     int rc;
-                    wd_arm(s, "decode", ALTR_WD_FEED_MS);
+                    wd_arm(s, "decode", ALTR_WD_FEED_MS, a.live_hold_until_ms);
                     rc = altr_hwdec_feed(a.hw, buf, (size_t)n);
                     wd_disarm();
                     if (rc < 0 || altr_hwdec_failed(a.hw)) {
@@ -720,6 +732,12 @@ int main(void)
              * whole connection): Android Auto sends almost no pictures while its
              * map is still, and that must not drop ctx 81/82. */
             now = now_ms();
+#ifdef PLATFORM_QNX
+            if (a.live_hold_until_ms) {
+                if (!a.last_shown_ms && now < a.live_hold_until_ms) set_live(1);
+                else a.live_hold_until_ms = 0;     /* first picture shown, or hold over */
+            }
+#endif
             if (a.last_shown_ms && (s->live_timeout_ms <= 0 ||
                                     (now - a.last_shown_ms) <= (uint64_t)s->live_timeout_ms))
                 set_live(1);
@@ -732,6 +750,7 @@ int main(void)
         hw_close(&a);
         a.hw_tried = 0;
         a.hw_deferred = 0;
+        if (!upgrade) a.live_hold_until_ms = 0;
 #endif
         altr_decode_flush(dec);
         if (!upgrade) set_live(0);

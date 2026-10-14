@@ -366,7 +366,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationThread.setDaemon(true);
             presentationThread.start();
         }
-        com.luka.carplay.core.ScreenModule.setNavActive(false);
+        publishNavActive(false);
 
         CarplayBus bus = CarplayBus.getInstance();
         bus.on(CarplayBus.EVT_RGD_UPDATE, this);
@@ -408,7 +408,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             presentationConfirmed = false;
             hasRouteUpdate = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);
+            publishNavActive(false);
             if (bap != null) {
                 bap.onStop();
                 bap.onShutdown();
@@ -459,7 +459,7 @@ public class RouteGuidance implements CarplayBus.Listener {
             rgActive = false;
             presentationConfirmed = false;
             routeWantsActive = false;
-            com.luka.carplay.core.ScreenModule.setNavActive(false);  /* hide layers (stock ctx 74) */
+            publishNavActive(false);  /* hide layers (stock ctx 74) */
             hasRouteUpdate = false;
             state.reset();
             return;
@@ -539,8 +539,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                  * for the text hold and position scroll, but no longer gates the context. */
                 presentationConfirmed = false;
                 rgActive = bap != null && bap.onStart();
-                /* Native VC arrows keep stock ctx 74: no overlay over the VC's own icon. */
-                com.luka.carplay.core.ScreenModule.setNavActive(rgActive && !bap.isNativeArrows());
+                publishNavActive(rgActive);
                 if (!rgActive) {
                     if (!bapStartPendingLogged) {
                         Log.w(TAG, "RG activation pending: BAP start did not complete; keeping ctx 74");
@@ -562,7 +561,7 @@ public class RouteGuidance implements CarplayBus.Listener {
                 rgActive = false;
                 presentationConfirmed = false;
                 /* RGI off -> hide the CarPlay cluster layers (stock ctx 74). */
-                com.luka.carplay.core.ScreenModule.setNavActive(false);
+                publishNavActive(false);
             }
         }
 
@@ -781,6 +780,13 @@ public class RouteGuidance implements CarplayBus.Listener {
         return applied;
     }
 
+    /** Route presentation up/down for the cluster.  Native VC arrows keep stock ctx 74 (no
+     *  overlay over the VC's own icon), but the route is still active for the roller toggle. */
+    private void publishNavActive(boolean active) {
+        com.luka.carplay.core.ScreenModule.setRouteGuidanceActive(active);
+        com.luka.carplay.core.ScreenModule.setNavActive(active && (bap == null || !bap.isNativeArrows()));
+    }
+
     /** Serialized with onFrame/stop so cached State and BAP are never mutated concurrently. */
     private synchronized boolean driveCachedPresentation() {
         if (!running || bap == null || !routeWantsActive) return false;
@@ -788,7 +794,7 @@ public class RouteGuidance implements CarplayBus.Listener {
         if (!rgActive) {
             rgActive = bap.onStart();
             if (!rgActive) return true;
-            com.luka.carplay.core.ScreenModule.setNavActive(!bap.isNativeArrows());
+            publishNavActive(true);
         }
 
         // FRAME_READY can win the race with the worker's first wake. Rebase

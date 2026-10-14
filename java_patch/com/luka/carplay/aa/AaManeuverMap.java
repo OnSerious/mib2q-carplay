@@ -124,6 +124,18 @@ public final class AaManeuverMap {
         return leftHandTraffic ? aaAngle - 180 : 180 - aaAngle;
     }
 
+    /**
+     * Estimated AA exit angle for exit n when AA sends the exit number without an angle
+     * (seen from Google Maps, issue #17): 90 degrees per exit, as on a four-arm roundabout,
+     * so exit 1 = first quarter, 2 = straight across, 3 = third quarter.  Exit 4+ is capped at
+     * 315 (sharp, back towards the entry) instead of 360: with no geometry a U-turn would be
+     * invented on any roundabout with more than four arms.  Returns 0 for n < 1 (absent).
+     */
+    public static int estimatedRoundaboutAngle(int exitNumber) {
+        if (exitNumber < 1) return 0;
+        return exitNumber >= 4 ? 315 : exitNumber * 90;
+    }
+
     public static Result map(int event, int turnSide, int turnAngle, int turnNumber) {
         Result m;
         switch (event) {
@@ -178,6 +190,10 @@ public final class AaManeuverMap {
         /* AA turnSide on a roundabout = direction of travel: LEFT = clockwise (left-hand traffic) */
         boolean lht = turnSide == SIDE_LEFT;
         int exit = roundaboutExitAngle(turnAngle, lht);
+        if (exit == Integer.MIN_VALUE && event == EV_ROUNDABOUT_ENTER_AND_EXIT) {
+            /* no angle: without one ManeuverMapper draws every exit straight across */
+            exit = roundaboutExitAngle(estimatedRoundaboutAngle(turnNumber), lht);
+        }
         boolean anglePresent = exit != Integer.MIN_VALUE;
         Result m;
         if (event == EV_ROUNDABOUT_ENTER) {

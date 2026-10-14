@@ -12,8 +12,9 @@ sources:
 
 # Native VC arrows - KDK hidden, VC draws FctID 23
 
-Default mode (issue #3): the Virtual Cockpit shows its **own Audi maneuver arrows** instead of
-the `maneuver_render` 3D arrow. The 3D arrow is opt-in.
+Opt-in mode (issue #3): the Virtual Cockpit shows its **own Audi maneuver arrows** instead of
+the `maneuver_render` 3D arrow. The 3D arrow is the default: on an Audi Q7 (MU1329, issue #9)
+the VC kept the KDK box open and drew nothing (see *Open points*).
 
 ## 📋 Context
 
@@ -38,16 +39,17 @@ start it forces rgActive + RGI valid, then calls `ClusterService.setKDKVisibilit
 
 ## ⚙️ What the switch changes
 
-Native arrows are on unless the marker `/mnt/app/carplay_native_arrows.off` (or `/tmp/...`) exists.
-It is read by `RgdModule` at every session start and latched by `BAPBridge.onStart()` per route.
-Toggle: `native_arrows_on` (removes the marker) / `native_arrows_off` (creates it), as M.I.B. mods
-and GEM buttons.
+Native arrows are on only while the marker `/mnt/app/carplay_native_arrows.on` (or `/tmp/...`)
+exists. It is read by `RgdModule` at every session start and latched by `BAPBridge.onStart()` per
+route. Toggle: `native_arrows_on` (creates the marker) / `native_arrows_off` (removes it), as M.I.B.
+mods and GEM buttons. Both also delete the `.off` marker of earlier builds, which is no longer read.
 
-| | 3D arrow (`.off` marker) | native arrows (default) |
+| | 3D arrow (default) | native arrows (`.on` marker) |
 |---|---|---|
 | `maneuver_render` / displayable 98 | started, primed | never started |
 | cluster context | ctx 80 (or 82 with AltScreen) | stays ctx 74 (or 81) |
 | `isPresentationReady()` | BAP + renderer FRAME_READY | BAP start only |
+| `ScreenModule` | `navActive` + `routeGuidanceActive` | `routeGuidanceActive` only (no overlay ctx); the roller route-info toggle reads either |
 | KDK | VC opens it (Fct44) | `setKDKVisibility(false)` at start; VC open requests answered "hidden" (`ClusterService.setSupplementaryMap`) until route end |
 | FctID 23 / maneuver box far from the turn | `FOLLOW_STREET` (box: approach arrow) beyond prepare (1.5 km city / 3 km highway), ManeuverState 1 | `FOLLOW_STREET` beyond prepare (1.5 km city / 3 km highway), ManeuverState 1 |
 | FctID 18/19/21/22/24/46/55 | unchanged | unchanged |
@@ -57,7 +59,10 @@ rollback, so stock navigation's KDK works normally after the route or the phone 
 
 ## ⚠️ Open points
 
-- On-car confirmation is still pending for this patch. Evidence so far: the MIBSI user reports on
-  issue #3, using the same firmware family.
+- **Audi Q7, MU1329 (issue #9): does not work.** After `native VC arrows: KDK hidden` the VC kept
+  sending Fct44 `KDK visible=true`, opened the box on the right and drew nothing into it (black, or
+  the map through it), and drew no arrow of its own either. Hence opt-in. Not yet known whether
+  that VC needs a different BAP signal (MIBSI's exact sequence) or its skin always reserves the box.
+- Other cars: the MIBSI user reports on issue #3, same firmware family.
 - If a VC skin re-requests the KDK in a loop, it gets "hidden" each time (the stock answer when no
   KDK is possible). Check the log for repeated `KDK kept hidden for native VC arrows`.

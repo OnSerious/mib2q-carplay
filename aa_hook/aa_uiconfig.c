@@ -18,8 +18,11 @@
  *   sport   small window left of the centre dial (the B9Sport stage starts at x 476)
  * The view comes from Java (/tmp/aa_cluster_view, com.luka.carplay.aa.AaClusterView).
  *
- * Theme: always dark. The fork found that Automatic and Light on the cluster display crash
- * Android Auto on the phone.
+ * Theme: dark by default. The fork found that Automatic and Light on the cluster display crash
+ * Android Auto on the phone. Opt-in marker aa_cluster.daynight (GEM "Android Auto cluster
+ * day/night"): Light by day, Dark by night, from the MMI day/night design that Java writes to
+ * /tmp/aa_cluster_theme (com.luka.carplay.aa.AaClusterTheme). Sent at connect and, on a
+ * change, as 0x8009 like a view change. Missing or garbled record = dark.
  *
  * Optional file aa_cluster.insets: 12 numbers, "top bottom left right" in viewport pixels
  * (0..540 / 0..1440) for full, classic, sport, in that order. Read at phone connect.
@@ -38,6 +41,7 @@
 #define VIEW_FULL    0
 #define VIEW_CLASSIC 1
 #define VIEW_SPORT   2
+#define UI_THEME_LIGHT 1u
 #define UI_THEME_DARK 2u
 #define VP_OX ((uint32_t)AA_MARGIN_W / 2u)
 #define VP_OY ((uint32_t)AA_MARGIN_H / 2u)
@@ -50,6 +54,7 @@
 static const uint32_t preset_default[3][4] = PRESET_DEFAULT;
 static uint32_t preset[3][4] = PRESET_DEFAULT;   /* aa_cluster.insets replaces it at connect */
 static int conn_view;        /* layout sent at connect */
+static unsigned conn_theme = UI_THEME_DARK;   /* theme sent at connect */
 
 static uint32_t rd(const void *p, unsigned off) { uint32_t v; memcpy(&v, (const char *)p + off, 4); return v; }
 static void wr(void *p, unsigned off, uint32_t v) { memcpy((char *)p + off, &v, 4); }
@@ -97,8 +102,24 @@ int aa_view_state(void)
     return -1;
 }
 
+/* Cluster theme: UI_THEME_DARK unless aa_cluster.daynight is set and Java's record says day.
+ * The record is one fixed 6-byte line, "day  \n" or "night\n". */
+unsigned aa_theme_state(void)
+{
+    char v[7] = {0};
+    FILE *f;
+    if (!aa_marker(AA_MARKER_DAYNIGHT)) return UI_THEME_DARK;
+    f = fopen(AA_THEME_PATH, "r");
+    if (!f) return UI_THEME_DARK;
+    if (!fgets(v, sizeof(v), f)) v[0] = 0;
+    fclose(f);
+    return strncmp(v, "day", 3) ? UI_THEME_DARK : UI_THEME_LIGHT;
+}
+
+static const char *theme_name(unsigned theme) { return theme == UI_THEME_LIGHT ? "light" : "dark"; }
+
 /* UiConfig body: 0x12 len {insets 0x08 top, 0x10 bottom, 0x18 left, 0x20 right}, 0x20 theme. */
-static unsigned uiconfig_body(unsigned char *ui, unsigned max, int view)
+static unsigned uiconfig_body(unsigned char *ui, unsigned max, int view, unsigned theme)
 {
     unsigned char in[20];
     unsigned ni = 0, nu = 0;
@@ -111,7 +132,7 @@ static unsigned uiconfig_body(unsigned char *ui, unsigned max, int view)
     if (max < ni + 4u) return 0;
     ui[nu++] = 0x12; nu += varint(ui + nu, ni);
     memcpy(ui + nu, in, ni); nu += ni;
-    ui[nu++] = 0x20; ui[nu++] = (unsigned char)UI_THEME_DARK;
+    ui[nu++] = 0x20; ui[nu++] = (unsigned char)theme;
     return nu;
 }
 
@@ -162,7 +183,8 @@ static void apply(void *vconf, const char *where)
     view = aa_view_state();
     if (view < 0) view = VIEW_FULL;
     conn_view = view;
-    nu = uiconfig_body(ui, sizeof(ui), view);
+    conn_theme = aa_theme_state();
+    nu = uiconfig_body(ui, sizeof(ui), view, conn_theme);
     if (!nu) return;
     p[n++] = 0x5a;                      /* VideoConfiguration field 11 = UiConfig */
     n += varint(p + n, nu);
@@ -173,8 +195,9 @@ static void apply(void *vconf, const char *where)
     wr(vconf, 0x08, (uint32_t)(uintptr_t)heap);
     wr(vconf, 0x18, n);
     wr(vconf, 0x1c, n);
-    aa_log("uiconfig.set where=%s view=%d top=%u bottom=%u left=%u right=%u theme=dark bytes=%u",
-           where, view, preset[view][0], preset[view][1], preset[view][2], preset[view][3], n);
+    aa_log("uiconfig.set where=%s view=%d top=%u bottom=%u left=%u right=%u theme=%s bytes=%u",
+           where, view, preset[view][0], preset[view][1], preset[view][2], preset[view][3],
+           theme_name(conn_theme), n);
 }
 
 void aa_uiconfig_sink(void *sink)
@@ -191,12 +214,12 @@ void aa_uiconfig_media(void *media)
 
 /* 0x8009 UpdateUiConfigRequest (HU -> phone, video channel): 2-byte big-endian type, then
  * field 1 = the same UiConfig as VideoConfiguration field 11. */
-unsigned aa_relayout_message(unsigned char *out, unsigned max, int view)
+unsigned aa_relayout_message(unsigned char *out, unsigned max, int view, unsigned theme)
 {
     unsigned char ui[40];
     unsigned nu, n = 0;
     if (view < 0 || view > 2) return 0;
-    nu = uiconfig_body(ui, sizeof(ui), view);
+    nu = uiconfig_body(ui, sizeof(ui), view, theme);
     if (!nu || max < nu + 5u) return 0;
     out[n++] = 0x80; out[n++] = 0x09;
     out[n++] = 0x0a; n += varint(out + n, nu);
@@ -209,16 +232,17 @@ typedef void (*queue_fn)(void *, unsigned char, void *, unsigned);
 /* The 2016 receiver has no sender for 0x8009, so it is queued like the receiver's own
  * VideoFocusNotification: MessageRouter::queueOutgoing(router, channel, data, len) copies it;
  * the sink (ProtocolEndpointBase) holds open flag +4, channel +5, router +8. */
-static int relayout_send(void *sink, int view)
+static int relayout_send(void *sink, int view, unsigned theme)
 {
     static queue_fn queue;
     unsigned char msg[64];
     unsigned n;
     if (!queue) queue = (queue_fn)dlsym(RTLD_DEFAULT, "_ZN13MessageRouter13queueOutgoingEhPvj");
-    n = aa_relayout_message(msg, sizeof(msg), view);
+    n = aa_relayout_message(msg, sizeof(msg), view, theme);
     if (!queue || !n || !rd(sink, 8) || !((const unsigned char *)sink)[4]) return 0;
     queue((void *)(uintptr_t)rd(sink, 8), ((const unsigned char *)sink)[5], msg, n);
-    aa_log("relayout.sent view=%d channel=%u bytes=%u", view, ((const unsigned char *)sink)[5], n);
+    aa_log("relayout.sent view=%d theme=%s channel=%u bytes=%u", view, theme_name(theme),
+           ((const unsigned char *)sink)[5], n);
     return 1;
 }
 
@@ -231,20 +255,23 @@ static uint64_t mono_ms(void)
 
 /* Receiver thread only (the thread the receiver itself sends from): the cluster sink's frame
  * callback and every routed message. The phone sends almost no pictures while its map is
- * still, so messages drive it too. The view file is read at most every 300 ms; a change
- * picked up on one call is sent on the next one. */
+ * still, so messages drive it too. The view and theme files are read at most every 300 ms; a
+ * change picked up on one call is sent on the next one. */
 void aa_relayout_tick(void *sink)
 {
     static void *cur_sink;
     static uint64_t next_check;
     static int sent_view, pending_view = -1, off;
+    static unsigned sent_theme, pending_theme;
     uint64_t now;
     int view;
+    unsigned theme;
     if (!sink) return;
     if (sink != cur_sink || !((const unsigned char *)sink)[4]) {   /* new session or channel closed */
         cur_sink = ((const unsigned char *)sink)[4] ? sink : NULL;
         next_check = 0;
         sent_view = conn_view;
+        sent_theme = conn_theme;
         pending_view = -1;
         off = aa_marker(AA_MARKER_RELAYOUT_OFF);
         if (!cur_sink) return;
@@ -253,7 +280,7 @@ void aa_relayout_tick(void *sink)
     if (pending_view >= 0) {
         int v = pending_view;
         pending_view = -1;
-        if (relayout_send(sink, v)) sent_view = v;
+        if (relayout_send(sink, v, pending_theme)) { sent_view = v; sent_theme = pending_theme; }
         return;
     }
     now = mono_ms();
@@ -261,5 +288,6 @@ void aa_relayout_tick(void *sink)
     next_check = now + 300u;
     view = aa_view_state();
     if (view < 0) view = sent_view;                     /* mid-write / no record: keep */
-    if (view != sent_view) pending_view = view;
+    theme = aa_theme_state();
+    if (view != sent_view || theme != sent_theme) { pending_view = view; pending_theme = theme; }
 }

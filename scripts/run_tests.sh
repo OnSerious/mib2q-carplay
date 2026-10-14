@@ -111,6 +111,7 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
 printf '%-32s ' aa_uiconfig_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     "-DAA_VIEW_PATH=\"$OUT/aa_view\"" "-DAA_FILE_INSETS=\"$OUT/aa_insets\"" "-DAA_FILE_DPI=\"$OUT/aa_dpi\"" \
+    "-DAA_THEME_PATH=\"$OUT/aa_theme\"" \
     tests/aa_uiconfig_test.c -ldl -o "$OUT/aa_uiconfig"
 "$OUT/aa_uiconfig"
 

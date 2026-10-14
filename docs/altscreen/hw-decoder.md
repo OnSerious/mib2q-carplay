@@ -83,7 +83,9 @@ Hung video hardware (issue #14):
 
 - **Boot settle time.** No hardware decoder before 120 s of uptime (`ALTR_HW_MIN_UPTIME_S`).
   A session that starts earlier decodes in software, then reconnects to the tee once at 120 s
-  and switches to hardware (`.live` is kept, so the cockpit does not flip back to the Audi map).
+  and switches to hardware. `.live` is refreshed for up to 3 s until the first hardware picture,
+  also while the decoder setup blocks (from the watchdog thread), so the cockpit does not flip
+  back to the Audi map (issue #9: it showed for ~0.3 s while `.live` aged past Java's 1 s limit).
 - **Wedged decoder.** A state change that times out, or an OMX `Timeout` / `Hardware` error,
   marks the component as wedged: no further OMX call is made (they block inside `videoCore`).
   The renderer switches hardware decode OFF and exits; the restarted renderer uses software.

@@ -86,6 +86,9 @@ public final class ScreenModule implements Module {
     private static int currentCtx = -1;
     private static volatile boolean connected = false;
     private static volatile boolean navActive = false;
+    /* A phone route owns BAP route guidance.  Same as navActive in 3D-arrow mode; with the
+     * native VC arrows navActive stays false (no overlay context) while this is true. */
+    private static volatile boolean routeGuidanceActive = false;
     private static volatile boolean altScreenActive = false;   /* altscreen_render live video */
     private static boolean navHidePending;
 
@@ -154,6 +157,14 @@ public final class ScreenModule implements Module {
      *  presentation and, after route end, VC's own KDK withdrawal; never a stray stock KDK bit. */
     public static boolean isNavActive() { return navActive; }
 
+    /** RouteGuidance: a route's BAP presentation is up (true) or ended (false), independent of
+     *  the overlay context.  Gates the steering-wheel route-info toggle (issue #9: in native-arrow
+     *  mode navActive stays false, so every press was dropped). */
+    public static void setRouteGuidanceActive(boolean active) { routeGuidanceActive = active; }
+
+    /** Route guidance shown on the VC by either arrow mode. */
+    public static boolean isRouteGuidanceShown() { return navActive || routeGuidanceActive; }
+
     /* ------------------------------------------------------------
      * Cluster map view size (Audi View button / NAV_VIEW_SIZE_CHOICE).
      * There is no CarPlay video to resize on this branch; the flag drives only LOCAL geometry —
@@ -215,7 +226,7 @@ public final class ScreenModule implements Module {
     /** Raw DSI key 40 (left steering-wheel roller press).  SteeringWheelInputModule already gates
      *  this callback to the confirmed VC map tab; the toggle is meaningful only with active RGI. */
     public static void onSteeringWheelOkPressed() {
-        if (!isConnected() || !isNavActive()) return;
+        if (!isConnected() || !isRouteGuidanceShown()) return;
         InfoModeListener listener = infoModeListener;
         if (listener == null) return;
         listener.onInfoModeToggle();
@@ -254,6 +265,7 @@ public final class ScreenModule implements Module {
             if (dm != d) { dm = d; currentCtx = -1; }
             connected = true;
             navActive = false;
+            routeGuidanceActive = false;
             altScreenActive = false;
             navHidePending = false;
             desiredCtx = CTX_STOCK_CLUSTER;
@@ -282,6 +294,7 @@ public final class ScreenModule implements Module {
         synchronized (LOCK) {
             connected = false;
             navActive = false;
+            routeGuidanceActive = false;
             altScreenActive = false;
             navHidePending = false;
         }

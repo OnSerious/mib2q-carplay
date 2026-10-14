@@ -1,8 +1,9 @@
 /*
  * Host test for aa_hook/aa_uiconfig.c: the per-view 0x8009 UpdateUiConfigRequest bytes (the
  * fork's car-validated viewport presets, sent in full 1920x1080 frame coordinates), the view
- * record Java writes, the density file and the insets override file.
- * Build with -DAA_VIEW_PATH / -DAA_FILE_INSETS / -DAA_FILE_DPI pointing at a temp dir.
+ * record Java writes, the density file, the insets override file and the opt-in day/night theme.
+ * Build with -DAA_VIEW_PATH / -DAA_FILE_INSETS / -DAA_FILE_DPI / -DAA_THEME_PATH pointing at a
+ * temp dir.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -13,7 +14,8 @@
 #include <stdio.h>
 
 void aa_log(const char *fmt, ...) { (void)fmt; }
-int aa_marker(const char *path) { (void)path; return 0; }
+static int daynight;          /* aa_cluster.daynight present */
+int aa_marker(const char *path) { return daynight && !strcmp(path, AA_MARKER_DAYNIGHT); }
 
 #define V2(v) (unsigned char)(0x80 | ((v) & 0x7f)), (unsigned char)((v) >> 7)
 
@@ -29,7 +31,7 @@ static void put(const char *path, const char *text)
 static void check_view(int view, const unsigned char *want, unsigned wn)
 {
     unsigned char p[64];
-    unsigned n = aa_relayout_message(p, sizeof(p), view);
+    unsigned n = aa_relayout_message(p, sizeof(p), view, UI_THEME_DARK);
     assert(n == 4 + 2 + wn + 2);
     assert(p[0] == 0x80 && p[1] == 0x09 && p[2] == 0x0a && p[3] == 2 + wn + 2);   /* 0x8009, field 1 */
     assert(p[4] == 0x12 && p[5] == wn);                                          /* UiConfig.insets */
@@ -51,8 +53,26 @@ int main(void)
     check_view(0, full, sizeof(full) - 2);
     check_view(1, classic, sizeof(classic) - 2);
     check_view(2, sport, sizeof(sport) - 2);
-    assert(aa_relayout_message(p, sizeof(p), 3) == 0 && aa_relayout_message(p, sizeof(p), -1) == 0);
-    assert(aa_relayout_message(p, 10, 0) == 0);                     /* no room: nothing */
+    assert(aa_relayout_message(p, sizeof(p), 3, UI_THEME_DARK) == 0
+        && aa_relayout_message(p, sizeof(p), -1, UI_THEME_DARK) == 0);
+    assert(aa_relayout_message(p, 10, 0, UI_THEME_DARK) == 0);      /* no room: nothing */
+
+    /* Light theme: same message, last byte 1. */
+    {
+        unsigned n = aa_relayout_message(p, sizeof(p), 0, UI_THEME_LIGHT);
+        assert(n == 4 + 2 + sizeof(full) && p[n - 2] == 0x20 && p[n - 1] == 1);
+    }
+
+    /* Day/night record from Java (fixed 6 bytes), honoured only with the opt-in marker. */
+    unlink(AA_THEME_PATH);
+    daynight = 0;
+    put(AA_THEME_PATH, "day  \n");    assert(aa_theme_state() == UI_THEME_DARK);   /* no marker */
+    daynight = 1;
+    assert(aa_theme_state() == UI_THEME_LIGHT);
+    put(AA_THEME_PATH, "night\n");    assert(aa_theme_state() == UI_THEME_DARK);
+    put(AA_THEME_PATH, "da");         assert(aa_theme_state() == UI_THEME_DARK);   /* mid-write */
+    unlink(AA_THEME_PATH);            assert(aa_theme_state() == UI_THEME_DARK);   /* no record */
+    daynight = 0;
 
     /* View record from Java (fixed 8 bytes); missing or garbled = unknown. */
     unlink(AA_VIEW_PATH);
@@ -86,6 +106,6 @@ int main(void)
     unlink(AA_FILE_DPI);
     unlink(AA_VIEW_PATH);
 
-    printf("aa_uiconfig_test: full/classic/sport 0x8009 bytes, view record, density, insets file PASS\n");
+    printf("aa_uiconfig_test: full/classic/sport 0x8009 bytes, view record, density, insets file, day/night theme PASS\n");
     return 0;
 }

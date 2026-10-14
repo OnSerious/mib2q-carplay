@@ -64,6 +64,19 @@ public final class AaRouteStateTest {
         check(d.num("m0_junction_type", -1) == AaManeuverMap.JUNCTION_ROUNDABOUT
             && d.num("m0_turn_angle", 99) == 0 && d.num("m0_driving_side", -1) == 0, "roundabout geometry");
 
+        /* Issue #17: Google Maps sends the exit number without an angle.  UK (clockwise), exit 3
+         * is the third quarter (right), not straight across. */
+        check(rg.onTurn("Mandela Way", 1, AaManeuverMap.EV_ROUNDABOUT_ENTER_AND_EXIT, 0, 3, 1), "roundabout no angle");
+        d = frame(rg);
+        check(d.num("m0_type", -1) == AaManeuverMap.MT_ROUNDABOUT_EXIT_1 + 2
+            && d.num("m0_turn_angle", 0) == 90 && d.num("m0_driving_side", -1) == 1, "estimated exit 3 CW");
+        AaManeuverMap.Result est = AaManeuverMap.map(AaManeuverMap.EV_ROUNDABOUT_ENTER_AND_EXIT, 2, 0, 1);
+        check(est.anglePresent && est.angle == 90, "estimated exit 1 CCW");
+        est = AaManeuverMap.map(AaManeuverMap.EV_ROUNDABOUT_ENTER_AND_EXIT, 1, 0, 6);
+        check(est.anglePresent && est.angle == 135, "estimated exit 6 CW capped short of a U-turn");
+        est = AaManeuverMap.map(AaManeuverMap.EV_ROUNDABOUT_ENTER_AND_EXIT, 1, 0, 0);
+        check(!est.anglePresent && est.type == AaManeuverMap.MT_ENTER_ROUNDABOUT, "no exit, no angle");
+
         /* Lanes from the gal hook record: straight (not highlighted), right (highlighted). */
         String rec = "SQ5L1 3\nlanes=2\n1,0|5,1\nend=3\n";
         AaLaneFeed.Lanes lanes = AaLaneFeed.parse(rec.getBytes("US-ASCII"), rec.length());

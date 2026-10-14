@@ -5,13 +5,21 @@ Changes since [1.1](RELEASE_NOTES-1.1.md). Draft: not released yet, the entries 
 
 ## New
 
-- **Native Audi arrows on the Virtual Cockpit (new default).** The VC draws its own Audi
-  maneuver arrows instead of the custom 3D arrow, including the roundabout exit number.
-  Like Audi navigation it shows "follow road" until the next turn is close (1.5 km in town,
-  3 km on the highway). This works for CarPlay and Android Auto. New menu buttons:
-  *Native Audi VC arrows ON (default)* and *Native Audi VC arrows OFF (3D arrow)*, also as
-  M.I.B. mods `native_arrows_on` / `native_arrows_off`. They apply on the next phone
-  connection. ([#3](https://github.com/kamgurgul/mib2q-carplay/issues/3)) *Car test pending.*
+- **Native Audi arrows on the Virtual Cockpit (optional).** With *Native Audi VC arrows ON
+  (opt-in)* the VC draws its own Audi maneuver arrows instead of the custom 3D arrow,
+  including the roundabout exit number, for CarPlay and Android Auto. The 3D arrow stays the
+  default: not every VC supports this. On an Audi Q7 (MU1329) the VC showed an empty box
+  instead of an arrow. If yours does that, press *Native Audi VC arrows OFF (3D arrow,
+  default)*. Also available as M.I.B. mods `native_arrows_on` / `native_arrows_off`. Both
+  apply on the next phone connection.
+  ([#3](https://github.com/kamgurgul/mib2q-carplay/issues/3),
+  [#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
+- **Android Auto cluster map follows MMI day/night (opt-in, experimental).** With *Android
+  Auto cluster day/night ON / OFF* in the menu, the Android Auto map on the VC is light by day
+  and dark by night, following the MMI, instead of always dark. It switches live while the
+  phone is connected. Off by default: in earlier tests by others, the light theme crashed
+  Android Auto on the phone. If that happens, press the button again.
+  ([#16](https://github.com/kamgurgul/mib2q-carplay/issues/16)) *Car test pending.*
 - **CarPlay cluster frame rate up to 60 fps (opt-in).** `/mnt/app/root/mibr-carplay111-fps`
   now accepts 5 to 60 (before: 20, 25 or 30). The default stays 30. Above 30 is at your own
   risk: some MHI2Q builds crash at 60. ([#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
@@ -42,7 +50,13 @@ Changes since [1.1](RELEASE_NOTES-1.1.md). Draft: not released yet, the entries 
   junction type got no arrow for ordinary turns. The arrow is now chosen from the maneuver
   type, exit angle and driving side only, as in MIBSI. Apple Maps and Google Maps are
   unchanged. ([#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
-- **3D arrow mode:** "follow road" far from the next turn, the same as the native arrows.
+- **"Follow road" far from the next turn**, like Audi navigation: the maneuver box shows the
+  real turn only from 1.5 km in town, 3 km on the highway.
+  ([#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
+- **Route-info toggle (left roller press) did nothing with the native arrows** on cars
+  without the VC screen manager (Audi Q7). ([#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
+- **No short Audi-map flash** about 2 minutes after start, when the cluster video switches
+  from software to hardware decoding.
   ([#9](https://github.com/kamgurgul/mib2q-carplay/issues/9))
 
 ## Documentation and project
@@ -56,8 +70,8 @@ Changes since [1.1](RELEASE_NOTES-1.1.md). Draft: not released yet, the entries 
 
 ## Updating from 1.1
 
-Copy both `carplay/` **and** `mod/` to the card: the menu has two new buttons. Run
+Copy both `carplay/` **and** `mod/` to the card: the menu has three new buttons. Run
 **M.I.B. -> Advanced Settings -> Run Custom Script** once, then reboot.
 
-Behaviour change: the VC now shows the native Audi arrows by default. If you prefer the 3D
-arrow, press **Native Audi VC arrows OFF (3D arrow)** and reconnect the phone.
+The 3D arrow is still the default. To try the VC's own Audi arrows, press **Native Audi VC
+arrows ON (opt-in)** and reconnect the phone.

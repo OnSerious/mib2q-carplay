@@ -38,9 +38,10 @@ CarPlay or Android Auto automatically.
 - **Route text in the Virtual Cockpit.** Shows the next road or exit sign. Press **OK**
   on the steering wheel to toggle arrival time and time left.
 - **Head-up display.** The same maneuver icons, lanes and distance.
-- **Native Audi arrows (default).** The Virtual Cockpit draws its own Audi maneuver
-  arrows (roundabout exit number included, "follow road" until the next turn is close).
-  `native_arrows_off` switches to the custom 3D arrow; `native_arrows_on` switches back.
+- **Native Audi arrows (optional).** `native_arrows_on` lets the Virtual Cockpit draw its
+  own Audi maneuver arrows instead of the custom 3D arrow (roundabout exit number included,
+  "follow road" until the next turn is close). Not every VC supports it: on an Audi Q7 the
+  box stays empty, so the 3D arrow is the default; `native_arrows_off` switches back.
 - **Cover art** on the cluster media screen.
 - **Parking popups no longer hide CarPlay** (front PDC view).
 - **MMI touchpad → D-pad** so drags navigate CarPlay menus (can be switched off: then
@@ -223,7 +224,7 @@ The manual SSH install, the exact config edits and the verification steps are in
 | `rgd_enable_…` / `rgd_disable_…` | turn route guidance on/off at runtime |
 | `aa_cluster_on_…` / `aa_cluster_off_…` | turn the Android Auto cluster map on/off (applies on the next phone connect) |
 | `touchpad_dpad_on_…` / `touchpad_dpad_off_…` | MMI touchpad as CarPlay D-pad on/off; off = stock touchpad input (next CarPlay connect) |
-| `native_arrows_on_…` / `native_arrows_off_…` | native Audi VC maneuver arrows (default); off = custom 3D arrow (next phone connect) |
+| `native_arrows_on_…` / `native_arrows_off_…` | native Audi VC maneuver arrows (opt-in); off = custom 3D arrow, the default (next phone connect) |
 | `altscreen_on_…` / `altscreen_off_…` | turn the AltScreen advertisement on/off (applies on the next phone connect) |
 | `altscreen_grid_…` | toggle the calibration grid over the cluster video |
 | `altscreen_safearea_…` | apply a custom AltScreen SafeArea from the card |
@@ -250,6 +251,7 @@ Its buttons run byte-identical copies of the M.I.B. mods, stored on the unit in
 | Re-request cluster map | re-send the cluster request in the running session so iOS picks the map app again (test) | no |
 | HW decoder ON / OFF | toggle hardware H.264 decode for the cluster video (default ON; next CarPlay connect) | no |
 | Android Auto cluster map ON / OFF | Android Auto cluster map on/off (next phone connect) | no |
+| Android Auto cluster day/night ON / OFF | opt-in, experimental: the Android Auto cluster map follows the MMI day/night design instead of always dark (applies live) | no |
 | Touchpad as D-pad ON / OFF | MMI touchpad as CarPlay D-pad, or stock touchpad input (next CarPlay connect) | no |
 | HW decoder probe (OMX) | log the OMX decoder's requirements to `/tmp/altscreen_render.log` (diagnostics only) | no |
 | Copy stock lsd.jxe to SD | extract_lsd mod | yes |

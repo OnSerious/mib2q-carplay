@@ -16,6 +16,9 @@
 #define AA_MARKER_ABI_TRIAL    AA_MARKER_DIR "aa_cluster.abi_trial"     /* unknown receiver: try anyway */
 #define AA_MARKER_NAVXLATE_OFF AA_MARKER_DIR "aa_cluster.navxlate_off"  /* leave 0x8006/0x8007 alone */
 #define AA_MARKER_RELAYOUT_OFF AA_MARKER_DIR "aa_cluster.relayout_off"  /* no per-view 0x8009 */
+#ifndef AA_MARKER_DAYNIGHT
+#define AA_MARKER_DAYNIGHT     AA_MARKER_DIR "aa_cluster.daynight"      /* opt-in: theme follows MMI */
+#endif
 /* Files; overridable for host tests. */
 #ifndef AA_FILE_DPI
 #define AA_FILE_DPI            AA_MARKER_DIR "aa_cluster.dpi"           /* one number, 80..400 */
@@ -29,6 +32,9 @@
 #endif
 #ifndef AA_VIEW_PATH
 #define AA_VIEW_PATH           "/tmp/aa_cluster_view"
+#endif
+#ifndef AA_THEME_PATH
+#define AA_THEME_PATH          "/tmp/aa_cluster_theme"
 #endif
 #define AA_TEE_PORT_DEFAULT    19821
 
@@ -68,7 +74,8 @@ int aa_dpi(void);
 void aa_uiconfig_sink(void *sink);
 void aa_uiconfig_media(void *media);
 void aa_relayout_tick(void *sink);
-unsigned aa_relayout_message(unsigned char *out, unsigned max, int view);
+unsigned aa_relayout_message(unsigned char *out, unsigned max, int view, unsigned theme);
 int aa_view_state(void);
+unsigned aa_theme_state(void);
 
 #endif
