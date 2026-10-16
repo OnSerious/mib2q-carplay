@@ -40,6 +40,9 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror \
     hook/framework/iap2_protocol.c -lpthread -lz -lm -o "$OUT/coverart_pipeline"
 "$OUT/coverart_pipeline"
 
+printf '%-32s ' rgd_lane_cache_test
+python3 -I tests/test_rgd_lane_cache.py
+
 printf '%-32s ' rgd_tlv_test
 cc -std=c99 -O1 -Wall -Wextra -Werror -Wno-unused-variable -Wno-unused-function \
     -DENABLE_LOGGING=0 -Ihook tests/rgd_tlv_test.c hook/routeguidance/rgd_tlv.c \
