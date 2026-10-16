@@ -23,7 +23,7 @@
  *  - lanes (onLanes, from the gal hook's /tmp/aa_lanes, AaLaneFeed): one lane event in lg
  *    cache slot 0, as the CarPlay C hook publishes an iOS 0x5204 event: lane_guidance_showing 1,
  *    lane_guidance_index/lg0_index = lane event id (bumped on every lane change),
- *    lane_guidance_slot 0, lg0_lane_count/positions (0..n-1 in Android Auto order)/directions/
+ *    lg0_lane_count/positions (0..n-1 in Android Auto order)/directions/
  *    status/angles/complete.  Per lane: angles = every known shape (AaLaneFeed.angle), direction =
  *    the highlighted shape's angle and status 2 (PREFERRED), else direction 1000 (unknown, drawn
  *    grey from its angles) and status 0.  No lanes / no route: showing 0 + the C hook's lg0 clear.
@@ -227,9 +227,7 @@ public final class AaRgState {
     private void appendLanes(StringBuffer b, AaLaneFeed.Lanes l) {
         if (l.count <= 0) {
             b.append("lane_guidance_showing:n:0\n");
-            b.append("lane_guidance_total:n:0\n");
             b.append("lane_guidance_index:n:-1\n");
-            b.append("lane_guidance_slot:n:-1\n");
             b.append("lg0_index:n:-1\n");
             b.append("lg0_lane_count:n:-1\n");
             b.append("lg0_lane_complete:n:0\n");
@@ -258,9 +256,7 @@ public final class AaRgState {
             st.append(primary == 1000 ? 0 : 2);
         }
         b.append("lane_guidance_showing:n:1\n");
-        b.append("lane_guidance_total:n:1\n");
         b.append("lane_guidance_index:n:").append(laneEvent).append('\n');
-        b.append("lane_guidance_slot:n:0\n");
         b.append("lg0_index:n:").append(laneEvent).append('\n');
         b.append("lg0_lane_count:n:").append(l.count).append('\n');
         b.append("lg0_lane_complete:n:1\n");
