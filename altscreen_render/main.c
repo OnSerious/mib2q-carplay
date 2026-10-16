@@ -43,8 +43,8 @@
  *                   a lost stream there; the tee closing is
  *   ALTR_HW_MIN_UPTIME_S (default 120) — no hardware decoder before this uptime;
  *                   software decode until then, then one reconnect to hardware.
- *                   Android Auto always; CarPlay only with the marker
- *                   /mnt/app/root/altscreen_render.hwdecode.delayed (GEM toggle)
+ *                   Android Auto always; CarPlay unless the marker
+ *                   /mnt/app/root/altscreen_render.hwdecode.immediate exists (GEM toggle)
  *
  * Copyright (c) 2026
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -128,13 +128,14 @@ struct source {
     int live_timeout_ms;        /* .live removed this long after the last shown picture; 0 = never while connected */
     const char *hw_off_marker;  /* persistent "hardware decode off" switch */
     const char *hw_off_boot;    /* the same for this boot (/tmp) */
-    const char *hw_settle_marker; /* present => wait ALTR_HW_MIN_UPTIME_S before hardware; NULL = always wait */
+    const char *hw_settle_off_marker; /* present => hardware at once; absent or NULL => wait ALTR_HW_MIN_UPTIME_S */
 };
 
-/* Delayed hardware start (GEM "HW decoder delayed start"): CarPlay starts on hardware at once
- * (as upstream mib2q-carplay-rgi), the marker brings back the boot settle time (issue #10).
+/* Delayed hardware start (GEM "HW decoder 2-min delayed start"): CarPlay waits the boot settle
+ * time by default too: on a Q7 (MU1329) opening the decoder 2-4 min after boot hung the video
+ * core like #14 (#22).  The marker restores upstream's immediate hardware start for CarPlay.
  * Android Auto always waits: its 1080p decoder hung the video core 64 s after boot (#14). */
-#define ALTR_HW_SETTLE_MARKER "/mnt/app/root/altscreen_render.hwdecode.delayed"
+#define ALTR_HW_SETTLE_OFF_MARKER "/mnt/app/root/altscreen_render.hwdecode.immediate"
 
 /* ---- liveness / status files (read by the Java cluster context module) ---- */
 static const char *g_live_file;
@@ -625,7 +626,7 @@ static void sources_init(struct source *src, int *nsrc, int surface_w, int surfa
     src[*nsrc].live_timeout_ms = env_i("ALTR_LIVE_TIMEOUT_MS", 500);
     src[*nsrc].hw_off_marker = ALTR_HWDEC_OFF_MARKER;
     src[*nsrc].hw_off_boot = ALTR_HWDEC_OFF_BOOT;
-    src[*nsrc].hw_settle_marker = ALTR_HW_SETTLE_MARKER;
+    src[*nsrc].hw_settle_off_marker = ALTR_HW_SETTLE_OFF_MARKER;
     (*nsrc)++;
 
     if (env_i("ALTR_AA_TEE_PORT", 19821) <= 0) return;
@@ -653,7 +654,7 @@ static void sources_init(struct source *src, int *nsrc, int surface_w, int surfa
     src[*nsrc].live_timeout_ms = env_i("ALTR_AA_LIVE_TIMEOUT_MS", 0);
     src[*nsrc].hw_off_marker = ALTR_AA_HWDEC_OFF_MARKER;
     src[*nsrc].hw_off_boot = ALTR_AA_HWDEC_OFF_BOOT;
-    src[*nsrc].hw_settle_marker = NULL;          /* always wait (issue #14) */
+    src[*nsrc].hw_settle_off_marker = NULL;      /* always wait (issue #14) */
     (*nsrc)++;
 }
 
@@ -779,8 +780,8 @@ int main(void)
                 if (!a.hw && !a.hw_tried && !a.hw_deferred && hw_wanted(s)) {
                     int hw_gate;
                     uint64_t hw_defer_until = 0;
-                    /* CarPlay waits only with the GEM "delayed start" marker; Android Auto always. */
-                    int settle = !s->hw_settle_marker || access(s->hw_settle_marker, F_OK) == 0;
+                    /* CarPlay waits unless the GEM "immediate" marker exists; Android Auto always. */
+                    int settle = !s->hw_settle_off_marker || access(s->hw_settle_off_marker, F_OK) != 0;
                     if (settle && now_ms() < a.hw_min_uptime_ms) {
                         /* Issue #14: a 1080p Android Auto decoder opened ~64 s after
                          * boot (phone route already active, so the cluster stream

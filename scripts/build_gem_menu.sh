@@ -31,11 +31,11 @@ grid|grid|Calibration grid ON / OFF (toggle)
 safearea|safearea|Apply SafeArea from SD (carplay_safearea*.conf)
 safearea_reset|safearea_reset|Reset SafeArea to built-in
 singleview|singleview|Classic-view SafeArea ON / OFF (2 ViewAreas)
-sportview|sportview|Sport own ViewArea ON / OFF (toggle, default OFF)
+sportview|sportview|Sport own ViewArea ON / OFF (toggle, default ON)
 appcard|appcard|App turn card on cluster during route ON / OFF (toggle, default OFF)
 reacquire|reacquire|Re-request cluster map (test app switching)
 hwdec|hwdec|HW decoder ON / OFF (toggle, default ON)
-hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default OFF)
+hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default ON)
 aa_cluster_on|aa_cluster_on|Android Auto cluster map ON
 aa_cluster_off|aa_cluster_off|Android Auto cluster map OFF
 aa_daynight|aa_daynight|Android Auto cluster day/night ON / OFF (toggle, opt-in, test)

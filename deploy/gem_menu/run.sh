@@ -120,17 +120,19 @@ case $ACT in
         fi
         ;;
     sportview)
-        # Opt-in: own ViewArea for the Sport layout's small map (x=590 y=88 350x296),
-        # instead of the classic one. Read when the AltScreen hook starts its profile.
-        M=/mnt/app/root/mibr-carplay111-viewareas.sport
+        # Default: own ViewArea for the Sport layout's small map (x=590 y=88 350x296), so
+        # Apple Maps keeps its turn card inside it. The off marker gives Sport the classic
+        # ViewArea (upstream). Read when the AltScreen hook starts its profile.
+        M=/mnt/app/root/mibr-carplay111-viewareas.sport.off
         mount -uw /mnt/app 2>/dev/null
+        rm -f /mnt/app/root/mibr-carplay111-viewareas.sport   # opt-in marker of q7h..q7k
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Sport uses the classic ViewArea (default). Reconnect the phone; if nothing changes, restart the MMI."
+            echo "DONE. Sport gets its own ViewArea (default). Reconnect the phone; if nothing changes, restart the MMI."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Sport gets its own ViewArea. Reconnect the phone; if nothing changes, restart the MMI."
+            echo "DONE. Sport uses the classic ViewArea. Reconnect the phone; if nothing changes, restart the MMI."
         fi
         ;;
     appcard)
@@ -169,19 +171,20 @@ case $ACT in
         fi
         ;;
     hwdelay)
-        # CarPlay starts on the hardware decoder at once (no switch, no blink). This marker
-        # brings back the 2-minute wait after an MMI start (software decode until then),
-        # for units that freeze when the decoder opens early (issue #10). Android Auto always
-        # waits (issue #14). Read per CarPlay connection.
-        M=/mnt/app/root/altscreen_render.hwdecode.delayed
+        # Default: CarPlay waits 2 minutes after an MMI start before the hardware decoder
+        # (software decode until then): opening it early froze a Q7 (#22, like #10/#14).
+        # The marker starts CarPlay on the hardware decoder at once (upstream). Android Auto
+        # always waits (issue #14). Read per CarPlay connection.
+        M=/mnt/app/root/altscreen_render.hwdecode.immediate
         mount -uw /mnt/app 2>/dev/null
+        rm -f /mnt/app/root/altscreen_render.hwdecode.delayed   # opt-in marker of q7j/q7k
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. CarPlay hardware decoder starts at once (default) from the next connection."
+            echo "DONE. CarPlay hardware decoder waits 2 minutes after an MMI start (default) from the next connection."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. CarPlay hardware decoder waits 2 minutes after an MMI start (software until then)."
+            echo "DONE. CarPlay hardware decoder starts at once from the next connection."
         fi
         ;;
     siri_short)
