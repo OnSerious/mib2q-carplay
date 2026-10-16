@@ -55,9 +55,22 @@ OUT=$BASE/$NN
 mkdir "$OUT" || { echo "FAILED mkdir $OUT"; exit 1; }
 echo "custom.sh: saving CarPlay logs to $OUT"
 
-run() {   # run <file> <command...>: best effort, output and errors into <file>
+# run <file> <command...>: best effort, output and errors into <file>.  A command still
+# running after RUN_MAX s is written to hung.txt with its pidin line (STATE and Blocked:
+# the server it waits on) and killed, so one wedged server cannot stop the save.  On a
+# frozen unit `mount` blocked in SEND for good and nothing after it was saved.
+RUN_MAX=30
+run() {
     f=$OUT/$1; shift
-    "$@" > "$f" 2>&1 || echo "(exit $?)" >> "$f"
+    "$@" > "$f" 2>&1 < /dev/null &
+    p=$!
+    ( sleep $RUN_MAX
+      { echo "== $* (pid $p) still running after ${RUN_MAX}s"; pidin -p $p; } >> "$OUT/hung.txt" 2>&1
+      kill -9 $p ) < /dev/null > /dev/null 2>&1 &
+    w=$!
+    rc=0; wait $p || rc=$?
+    kill $w 2>/dev/null
+    [ $rc -eq 0 ] || echo "(exit $rc)" >> "$f"
 }
 
 # ---- what the unit looks like right now ----
@@ -69,14 +82,19 @@ run() {   # run <file> <command...>: best effort, output and errors into <file>
     echo "script      $D/custom.sh"
 } > "$OUT/info.txt"
 run uname.txt uname -a
+# The system log first: it is a RAM ring buffer, and on a frozen unit it is the one
+# record of what went wrong before the commands below can get stuck.
+run sloginfo_mmx.txt sloginfo
+run sloginfo_rcc.txt on -f rcc sloginfo
 run pidin_ar.txt pidin ar
 run pidin_info.txt pidin info
 # CPU: smartphone_integrator restarts the session when the main-screen video
 # decoder makes no progress for decoderRestartTimeout (10 s on this unit), so a
-# CPU-starved decoder and a broken one look identical in the hook log. hogs and
+# CPU-starved decoder and a broken one look identical in the hook log. top and
 # per-thread times separate them: altscreen_render decodes 1440x540 H.264 in
-# software, which is the one process that could starve dio_manager.
-run hogs.txt hogs -i 3
+# software, which is the one process that could starve dio_manager.  top, not hogs:
+# this hogs has no iteration count (-n -p -s -% only) and would never return.
+run top.txt top -d -i 2
 run pidin_times.txt pidin times
 run pidin_mem.txt pidin mem
 run mount.txt mount
@@ -90,9 +108,8 @@ run pfctl_rules.txt pfctl -sr
 run pfctl_nat.txt pfctl -sn
 run pfctl_info.txt pfctl -si
 run netstat_an.txt netstat -an
-run sloginfo_mmx.txt sloginfo
-run sloginfo_rcc.txt on -f rcc sloginfo
 run hooks_ls.txt ls -la /mnt/app/root/hooks /mnt/app/eso/hmi/lsd/jars /mnt/app/eso/bin/apps/smartphone_integrator
+RUN_MAX=120                              # a full flash walk may take a while
 run carplay_stock_ls.txt find /mnt/app /mnt/system -name '*.carplay-stock'
 run tmp_ls.txt ls -la "$SRC"
 run cores_ls.txt ls -la /mnt/ota/system/core
@@ -104,6 +121,7 @@ run cores_ls.txt ls -la /mnt/ota/system/core
 mkdir "$OUT/hwdec"
 run hwdec/omx_libs.txt find /mnt/app /mnt/system /proc/boot /lib /usr/lib \
     \( -iname '*omx*' -o -iname '*vdec*' -o -iname '*venus*' -o -iname '*mm-*' -o -iname '*qcvideo*' \) -print
+RUN_MAX=30
 run hwdec/dio_libs.txt pidin -P dio_manager mem
 if [ ! -f "$BASE/hwdec/libairplay.so" ]; then
     mkdir -p "$BASE/hwdec"
