@@ -1,7 +1,8 @@
 # 1.2-q7l (test build, Q7)
 
-Based on kamgurgul master bdf411d (v1.2 + favorites dialing, touchpad switch applies at once,
-renderers wait for native navigation after power-on), otherwise unchanged.
+Based on kamgurgul master 66f301c (v1.2 + favorites dialing, touchpad switch applies at once,
+renderers wait for native navigation after power-on, lane guidance fixes from upstream #23),
+otherwise unchanged.
 
 - New in q7l, two defaults switched ON (both GEM buttons still toggle them off):
   - Sport own ViewArea: Apple Maps keeps its turn card inside the Sport small map instead of
