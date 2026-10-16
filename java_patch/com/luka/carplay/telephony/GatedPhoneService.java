@@ -61,9 +61,10 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     /* VC actions handled for CarPlay (GatedPhoneListener). */
     static final int ACT_ACCEPT = 1, ACT_HANGUP = 2, ACT_HOLD = 3, ACT_RESUME = 4, ACT_SWAP = 5, ACT_DIAL = 6,
                      ACT_MUTE_ON = 7, ACT_MUTE_OFF = 8, ACT_RESET_MISSED = 9;
-    /* hook/telephony CMD_TEL actions: MuteStatusUpdate, HoldStatusUpdate, AcceptCall, EndCall, SwapCalls. */
+    /* hook/telephony CMD_TEL actions: MuteStatusUpdate, HoldStatusUpdate, AcceptCall, EndCall, SwapCalls,
+     * InitiateCall by AddressBookID ([6][u8 service][id UTF-8]). */
     private static final int TEL_CMD_MUTE = 1, TEL_CMD_HOLD = 2, TEL_CMD_ACCEPT = 3, TEL_CMD_END = 4,
-                             TEL_CMD_SWAP = 5;
+                             TEL_CMD_SWAP = 5, TEL_CMD_DIAL_CONTACT = 6;
     /* BAP callMode, as stock BAPPropertyTelCombinedNumbers.getCallMode maps DSI stacks. */
     private static final int CALLMODE_MISSED = 1, CALLMODE_RECEIVED = 2, CALLMODE_DIALED = 3;
     /* DSICarplay BUTTON_*: CarPlay's HID telephony keys, as stock MFLPhoneButtonsListener
@@ -134,6 +135,9 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     /* CarPlay recents/favorites from hook/telephony (iAP2 ListUpdate) and our mic mute. */
     private CombiBAPCallStackEntry[] recents = new CombiBAPCallStackEntry[0];
     private CombiBAPFavoriteNumberEntry[] favorites = new CombiBAPFavoriteNumberEntry[0];
+    /* Parallel to favorites: AddressBookID and Service, for favorites iOS sends without a number. */
+    private String[] favoriteIds = new String[0];
+    private int[] favoriteServices = new int[0];
     private boolean muted;
 
     /* CarPlay calls: slot order follows DSICarplay's array. */
@@ -173,10 +177,17 @@ public class GatedPhoneService implements CombiBAPServicePhone {
     static boolean onVcAction(int action, String number) {
         GatedPhoneService g;
         synchronized (GatedPhoneService.class) { g = instance; }
-        return g != null && g.handle(action, number);
+        return g != null && g.handle(action, number, null);
     }
 
-    private synchronized boolean handle(int action, String number) {
+    /** A VC dial: the entry's number and the name the VC shows for it. */
+    static boolean onVcDial(String number, String name) {
+        GatedPhoneService g;
+        synchronized (GatedPhoneService.class) { g = instance; }
+        return g != null && g.handle(ACT_DIAL, number, name);
+    }
+
+    private synchronized boolean handle(int action, String number, String name) {
         if (!gated) return false;
         Commands c = commands;
         int result = RESULT_FAILED;
@@ -222,10 +233,22 @@ public class GatedPhoneService implements CombiBAPServicePhone {
                 real.updateMissedCallIndication(0, 0);
                 result = RESULT_OK;
                 break;
-            case ACT_DIAL:
-                if (c != null && number != null && number.length() > 0) { c.dial(number); result = RESULT_OK; }
+            case ACT_DIAL: {
+                String n = dialable(number);
+                if (c != null && n != null) {
+                    if (!n.equals(number)) Log.i(TAG, "dial: number formatting removed ("
+                        + number.length() + " -> " + n.length() + " chars)");
+                    c.dial(n);
+                    result = RESULT_OK;
+                } else if (n == null && dialFavoriteContact(name)) {
+                    result = RESULT_OK;          /* iOS calls the contact itself (InitiateCall) */
+                } else if (n == null) {
+                    Log.w(TAG, "dial: entry has no phone number and no matching favorite ("
+                        + (number == null ? 0 : number.length()) + " chars)");
+                }
                 real.dialNumberResult(result);
                 break;
+            }
             default:
                 return false;
         }
@@ -233,10 +256,53 @@ public class GatedPhoneService implements CombiBAPServicePhone {
         return true;
     }
 
-    private static boolean tel(int action, boolean on) {
-        return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_TEL,
-            new byte[] { (byte)action, (byte)(on ? 1 : 0) });
+    /** The number as a tel: URL body, or null when it has no digit.  A favorite's RemoteID is the
+     *  number as stored in the contact ("+48 600 123 456", "(555) 123-4567", NBSP and bidi marks),
+     *  while a recent's is plain digits; iOS ignores a tel: URL with those characters, so only
+     *  digits, a leading '+', '*', '#' (as %23) and the ',' / ';' pause characters are kept. */
+    static String dialable(String number) {
+        if (number == null) return null;
+        StringBuffer b = new StringBuffer(number.length());
+        boolean digit = false;
+        for (int i = 0; i < number.length(); i++) {
+            char ch = number.charAt(i);
+            if (ch >= '0' && ch <= '9') { b.append(ch); digit = true; }
+            else if (ch >= '０' && ch <= '９') { b.append((char)(ch - '０' + '0')); digit = true; }
+            else if ((ch == '+' || ch == '＋') && b.length() == 0) b.append('+');
+            else if (ch == '*' || ch == ',' || ch == ';') b.append(ch);
+            else if (ch == '#') b.append("%23");
+        }
+        return digit ? b.toString() : null;
     }
+
+    /** A favorite iOS listed without a number (RemoteID): dial its contact by AddressBookID.
+     *  The VC echoes the entry's name, which is how the entry is found again. */
+    private boolean dialFavoriteContact(String name) {
+        if (name == null || name.length() == 0) return false;
+        for (int i = 0; i < favorites.length && i < favoriteIds.length; i++) {
+            if (!name.equals(favorites[i].getName()) || favoriteIds[i].length() == 0) continue;
+            byte[] id;
+            try { id = favoriteIds[i].getBytes("UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return false; }
+            byte[] cmd = new byte[2 + id.length];
+            cmd[0] = (byte) TEL_CMD_DIAL_CONTACT;
+            cmd[1] = (byte) favoriteServices[i];
+            System.arraycopy(id, 0, cmd, 2, id.length);
+            boolean sent = telSink.send(cmd);
+            Log.i(TAG, "dial: favorite " + i + " without a number -> InitiateCall " + (sent ? "sent" : "not sent"));
+            return sent;
+        }
+        return false;
+    }
+
+    private static boolean tel(int action, boolean on) {
+        return telSink.send(new byte[] { (byte)action, (byte)(on ? 1 : 0) });
+    }
+
+    /** CMD_TEL to hook/telephony; replaced by tests. */
+    interface TelSink { boolean send(byte[] cmd); }
+    static TelSink telSink = new TelSink() {
+        public boolean send(byte[] cmd) { return CarplayBus.getInstance().sendBinary(CarplayBus.CMD_TEL, cmd); }
+    };
 
     private boolean has(int bapState) {
         for (int i = 0; i < calls.length; i++)
@@ -364,12 +430,18 @@ public class GatedPhoneService implements CombiBAPServicePhone {
                           callMode(d.num("r." + i + ".type", -1)), d.num64("r." + i + ".ts", 0));
         }
         CombiBAPFavoriteNumberEntry[] f = new CombiBAPFavoriteNumberEntry[fn];
+        String[] fid = new String[fn];
+        int[] fsvc = new int[fn];
         for (int i = 0; i < fn; i++) {
             String num = d.str("f." + i + ".a", ""), name = d.str("f." + i + ".b", "");
             f[i] = new CombiBAPFavoriteNumberEntry(i, isNumber(name) ? "" : name, num);
+            fid[i] = d.str("f." + i + ".id", "");
+            fsvc[i] = d.num("f." + i + ".svc", 0);
         }
         recents = r;
         favorites = f;
+        favoriteIds = fid;
+        favoriteServices = fsvc;
         Log.i(TAG, "CarPlay lists: recents=" + rn + " favorites=" + fn);
         if (gated) publishLists();
     }

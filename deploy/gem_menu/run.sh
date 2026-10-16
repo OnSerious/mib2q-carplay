@@ -169,8 +169,8 @@ case $ACT in
         ;;
     aa_daynight)
         # Opt-in: the Android Auto cluster map follows the MMI day/night design (Light by
-        # day, Dark by night) instead of always Dark. Experimental: upstream saw Light crash
-        # Android Auto on the phone. The gal hook checks the marker every 300 ms.
+        # day, Dark by night) instead of always Dark. Experimental. The theme is picked when
+        # the phone connects: changing it in a running session drops Android Auto (#19).
         M=/mnt/app/root/aa_cluster.daynight
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
@@ -182,7 +182,7 @@ case $ACT in
             echo "DONE. Android Auto cluster map follows MMI day/night (opt-in)."
             echo "If Android Auto on the phone crashes, press this again to turn it off."
         fi
-        echo "Applies within a second while connected, otherwise at the next phone connection."
+        echo "Applies at the next phone connection (a day/night change while connected waits for it too)."
         ;;
     reacquire)
         # Test: re-send the cluster showUI in the running session, so iOS picks

@@ -28,6 +28,12 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     com.luka.carplay.telephony.GatedPhoneAndroidAutoTest
 
+# Cluster phone tab: a favorite's contact-formatted number dials as a clean tel: URL.
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/GatedPhoneDialTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    com.luka.carplay.telephony.GatedPhoneDialTest
+
 # Siri on a short voice-key press is opt-in (marker); default = stock car voice control.
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     -d "$TEST_DIR" "$PROJECT_DIR/tests/SiriShortPressTest.java"

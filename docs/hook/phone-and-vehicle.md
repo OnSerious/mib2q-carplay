@@ -36,6 +36,14 @@ is in Apple CarPlay mode" popup and goes straight to CarPlay. No caller photo (i
 | `ServiceManagerPhone`, `phone/sm/Activator`, `system/sm/Activator` | patched stock classes that install the wrappers and the popup skip (`CarPlayPhoneSMM`, `CarPlaySystemSMM`) |
 | `CarplayDSILifecycleController` | forwards `updateCallState`, dials with `tel:` URLs, drops the duplicate stock Tel key |
 
+Dialling from the tab uses the stock `tel:<number>` URL, with the contact formatting (spaces,
+dashes, brackets, NBSP, bidi marks) stripped first: a favorite's RemoteID is the number as stored
+in the contact, a recent's is plain digits, and iOS ignores a `tel:` URL with formatting in it. A
+favorite iOS lists without a RemoteID is found again by the name the VC echoes and dialled with
+iAP2 InitiateCall 0x415A (Type 0, Service, AddressBookID; `CMD_TEL` action 6). The hook logs once
+per list change how many favorites came with a number and with an AddressBookID (counts only).
+*Car test pending* (`tests/GatedPhoneDialTest.java`, `tests/tel_hook_test.c`).
+
 Bluetooth phones are untouched: the gate stays off.
 
 ### Android Auto (our addition, not upstream)
@@ -73,7 +81,7 @@ control, the long press Siri. Test: `tests/SiriShortPressTest.java`.
 
 ## ⚙️ Install
 
-The installer adds the message IDs to `dio_manager.json` (`patch_dio`): sent `0x415B 0x415C 0x415D
+The installer adds the message IDs to `dio_manager.json` (`patch_dio`): sent `0x415A 0x415B 0x415C 0x415D
 0x415F 0x4160 0x4170 0xA101`, received `0x4171 0xA100 0xA102`, and sets the PASCD bit 0x08 in
 `"nmea"`. A unit installed with 1.1 needs the installer run again; it only adds what is missing.
 

@@ -118,7 +118,8 @@
 #define CMD_TEL                 0x0117  /* binary [u8 action][u8 on]: 1 = mute */
                                         /* (0x4160), 2 = hold (0x415F), 3 =    */
                                         /* accept (0x415B), 4 = end (0x415C),  */
-                                        /* 5 = swap (0x415D)                   */
+                                        /* 5 = swap (0x415D), 6 = InitiateCall */
+                                        /* 0x415A [6][u8 service][AddressBookID] */
 #define CMD_VEHICLE             0x0118  /* binary, Java->hook, little-endian:  */
                                         /* [u8 version=1][u8 valid bits: b0    */
                                         /* speed, b1 gear, b2 range, b3 outside */

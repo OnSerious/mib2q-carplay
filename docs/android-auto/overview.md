@@ -124,7 +124,7 @@ They apply on the next phone connection, except the first row, which needs a reb
 | `/mnt/app/root/aa_cluster.off` | no cluster display (M.I.B./GEM: *Android Auto cluster map OFF*) |
 | `/mnt/app/root/aa_cluster.abi_trial` | run the hook on a receiver without a profile (testing only; `gal` may crash) |
 | `/mnt/app/root/aa_cluster.navxlate_off` / `.relayout_off` | leave new nav messages alone / no layout updates |
-| `/mnt/app/root/aa_cluster.daynight` | opt-in: cluster map Light by day, Dark by night from the MMI day/night design (GEM: *Android Auto cluster day/night*; checked live) |
+| `/mnt/app/root/aa_cluster.daynight` | opt-in: cluster map Light by day, Dark by night from the MMI day/night design (GEM: *Android Auto cluster day/night*; picked at phone connect) |
 | `/mnt/app/root/aa_cluster.dpi` | density, one number 80..400 (default 125 = 1:1 on the 125 PPI panel) |
 | `/mnt/app/root/aa_cluster.insets` | 12 numbers: top bottom left right for full, classic, sport |
 | `/mnt/app/root/altscreen_render.aa.hwdecode.off` | Android Auto software decode |
@@ -144,8 +144,11 @@ They apply on the next phone connection, except the first row, which needs a reb
 - Dark map by default: the Light and Automatic themes on the cluster display crashed Android
   Auto on the phone (upstream on-car runs). `aa_cluster.daynight` opts in to Light by day:
   Java writes the MMI day/night design (stock `NightDayModeHandler`) to
-  `/tmp/aa_cluster_theme`, and the hook sends it at connect and as a `0x8009` layout update
-  on every change. Not yet tested on the car with current Android Auto.
+  `/tmp/aa_cluster_theme`, and the hook sends it **at connect only**. Changing the theme in a
+  running session (a `0x8009` layout update with a new theme) dropped the phone's Android Auto
+  session ~2 s later on the car (issue #19; a `0x8009` for a view change is fine), so every
+  layout update keeps the session's connect-time theme and a day/night change applies from the
+  next phone connect (`theme.deferred` in `aa_cluster_hook.log`).
 - Size and density apply on the next phone connection; layouts switch live.
 - A route started while parked shows Google's "depart" step at 0 m until the car moves; it
   is shown as soon as Android Auto reports navigation focus (car log 021).

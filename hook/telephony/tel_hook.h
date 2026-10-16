@@ -21,6 +21,9 @@ size_t tel_build_start_list_updates(uint8_t* out, size_t out_max,
                                     uint16_t recents_max, uint16_t favorites_max);
 /* HoldStatusUpdate / MuteStatusUpdate body: one bool status param. */
 size_t tel_build_status(uint8_t* out, size_t out_max, bool on);
+/* InitiateCall 0x415A body for a contact: Type 0 (destination), Service (omitted when 0) and
+ * AddressBookID.  For favorites that carry no RemoteID. */
+size_t tel_build_initiate_call(uint8_t* out, size_t out_max, uint8_t service, const char* address_book_id);
 
 #define TEL_LIST_MAX      20
 #define TEL_TEXT_MAX      64
@@ -29,6 +32,8 @@ typedef struct {
     uint16_t index;
     char a[TEL_TEXT_MAX];       /* param 1: RemoteID (number) */
     char b[TEL_TEXT_MAX];       /* param 2: DisplayName */
+    char id[TEL_TEXT_MAX];      /* param 4: AddressBookID (the contact; InitiateCall dials it) */
+    uint8_t service;            /* param 5: 1 phone, 2 FaceTime audio, 3 FaceTime video, 0 other */
     uint8_t type;               /* recents only: 1 incoming, 2 outgoing, 3 missed */
     uint64_t timestamp;         /* recents only: UnixTimestamp */
     uint8_t occurrences;        /* recents only: combined calls, 0 = not sent */

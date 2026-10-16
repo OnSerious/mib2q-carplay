@@ -21,8 +21,11 @@
  * Theme: dark by default. The fork found that Automatic and Light on the cluster display crash
  * Android Auto on the phone. Opt-in marker aa_cluster.daynight (GEM "Android Auto cluster
  * day/night"): Light by day, Dark by night, from the MMI day/night design that Java writes to
- * /tmp/aa_cluster_theme (com.luka.carplay.aa.AaClusterTheme). Sent at connect and, on a
- * change, as 0x8009 like a view change. Missing or garbled record = dark.
+ * /tmp/aa_cluster_theme (com.luka.carplay.aa.AaClusterTheme). Sent at connect only: a theme
+ * change in a running session as 0x8009 drops the phone's Android Auto session about 2 s later
+ * (issue #19; the same 0x8009 for a view change is fine), so every 0x8009 carries the theme the
+ * session connected with and a day/night change applies from the next connect. Missing or
+ * garbled record = dark.
  *
  * Optional file aa_cluster.insets: 12 numbers, "top bottom left right" in viewport pixels
  * (0..540 / 0..1440) for full, classic, sport, in that order. Read at phone connect.
@@ -255,14 +258,15 @@ static uint64_t mono_ms(void)
 
 /* Receiver thread only (the thread the receiver itself sends from): the cluster sink's frame
  * callback and every routed message. The phone sends almost no pictures while its map is
- * still, so messages drive it too. The view and theme files are read at most every 300 ms; a
- * change picked up on one call is sent on the next one. */
+ * still, so messages drive it too. The view file is read at most every 300 ms; a change picked
+ * up on one call is sent on the next one. The theme never changes mid-session (issue #19):
+ * every 0x8009 carries conn_theme, and a new day/night state is only logged, once. */
 void aa_relayout_tick(void *sink)
 {
     static void *cur_sink;
     static uint64_t next_check;
     static int sent_view, pending_view = -1, off;
-    static unsigned sent_theme, pending_theme;
+    static unsigned deferred_theme;
     uint64_t now;
     int view;
     unsigned theme;
@@ -271,7 +275,7 @@ void aa_relayout_tick(void *sink)
         cur_sink = ((const unsigned char *)sink)[4] ? sink : NULL;
         next_check = 0;
         sent_view = conn_view;
-        sent_theme = conn_theme;
+        deferred_theme = conn_theme;
         pending_view = -1;
         off = aa_marker(AA_MARKER_RELAYOUT_OFF);
         if (!cur_sink) return;
@@ -280,7 +284,7 @@ void aa_relayout_tick(void *sink)
     if (pending_view >= 0) {
         int v = pending_view;
         pending_view = -1;
-        if (relayout_send(sink, v, pending_theme)) { sent_view = v; sent_theme = pending_theme; }
+        if (relayout_send(sink, v, conn_theme)) sent_view = v;
         return;
     }
     now = mono_ms();
@@ -288,6 +292,11 @@ void aa_relayout_tick(void *sink)
     next_check = now + 300u;
     view = aa_view_state();
     if (view < 0) view = sent_view;                     /* mid-write / no record: keep */
+    if (view != sent_view) pending_view = view;
     theme = aa_theme_state();
-    if (view != sent_view || theme != sent_theme) { pending_view = view; pending_theme = theme; }
+    if (theme != deferred_theme) {
+        deferred_theme = theme;
+        aa_log("theme.deferred theme=%s session=%s (applies at the next phone connect)",
+               theme_name(theme), theme_name(conn_theme));
+    }
 }

@@ -32,6 +32,7 @@ DEFINE_LOG_MODULE(TELEPHONY);
 #define MSG_COMM_UPDATE         0x4158  /* stock subscription, read-only here */
 #define MSG_ACCEPT_CALL         0x415B
 #define MSG_END_CALL            0x415C
+#define MSG_INITIATE_CALL       0x415A
 #define MSG_SWAP_CALLS          0x415D
 #define MSG_HOLD_STATUS_UPDATE  0x415F
 #define MSG_MUTE_STATUS_UPDATE  0x4160
@@ -48,6 +49,7 @@ DEFINE_LOG_MODULE(TELEPHONY);
 #define TEL_CMD_ACCEPT          3       /* [u8 action]: 0 accept / hold-and-accept */
 #define TEL_CMD_END             4       /* [u8 action]: 0 end, 1 end all */
 #define TEL_CMD_SWAP            5       /* [u8 ignored]: SwapCalls has no params */
+#define TEL_CMD_DIAL_CONTACT    6       /* [u8 service][AddressBookID UTF-8]: InitiateCall */
 
 static const uint16_t tel_msg_filter[] = { MSG_START_CALL_STATE, MSG_COMM_UPDATE, MSG_LIST_UPDATE,
                                            MSG_START_POWER_UPDATES, MSG_POWER_UPDATE };
@@ -107,6 +109,15 @@ size_t tel_build_status(uint8_t* out, size_t out_max, bool on) {
     return put_tlv(out, out_max, 0, 0, &v, 1);
 }
 
+size_t tel_build_initiate_call(uint8_t* out, size_t out_max, uint8_t service, const char* id) {
+    uint8_t type = 0;                   /* Destination */
+    size_t off;
+    if (!id || !*id) return 0;
+    if (!(off = put_tlv(out, out_max, 0, 0, &type, 1))) return 0;
+    if (service && !(off = put_tlv(out, out_max, off, 2, &service, 1))) return 0;
+    return put_tlv(out, out_max, off, 3, id, strlen(id) + 1);  /* iAP2 UTF-8 is NUL-terminated */
+}
+
 /* ---------------- parser ---------------- */
 
 static void copy_str(char* dst, const iap2_tlv_t* t) {
@@ -132,6 +143,8 @@ static void parse_entry(const uint8_t* p, size_t len, tel_entry_t* e) {
             case 0: if (t.value_len == 2) e->index = (uint16_t)be_n(t.value, 2); break;
             case 1: copy_str(e->a, &t); break;
             case 2: copy_str(e->b, &t); break;
+            case 4: copy_str(e->id, &t); break;
+            case 5: if (t.value_len == 1) e->service = t.value[0]; break;
             case 6: if (t.value_len == 1) e->type = t.value[0]; break;
             case 7: if (t.value_len == 8) e->timestamp = be_n(t.value, 8); break;
             case 9: if (t.value_len == 1) e->occurrences = t.value[0]; break;
@@ -262,7 +275,10 @@ static void add_list(bus_text_builder_t* b, const char* p, const tel_entry_t* e,
     for (i = 0; i < n; i++) {
         snprintf(key, sizeof(key), "%s.%u.a", p, (unsigned)i); bus_text_str(b, key, e[i].a);
         snprintf(key, sizeof(key), "%s.%u.b", p, (unsigned)i); bus_text_str(b, key, e[i].b);
-        if (recents) {
+        if (!recents) {
+            snprintf(key, sizeof(key), "%s.%u.id", p, (unsigned)i); bus_text_str(b, key, e[i].id);
+            snprintf(key, sizeof(key), "%s.%u.svc", p, (unsigned)i); bus_text_int(b, key, e[i].service);
+        } else {
             snprintf(key, sizeof(key), "%s.%u.type", p, (unsigned)i); bus_text_int(b, key, e[i].type);
             snprintf(key, sizeof(key), "%s.%u.ts", p, (unsigned)i); bus_text_uint(b, key, e[i].timestamp);
             snprintf(key, sizeof(key), "%s.%u.occ", p, (unsigned)i); bus_text_int(b, key, e[i].occurrences);
@@ -285,6 +301,20 @@ static void publish_lists(const tel_lists_t* upd) {
     }
     LOG_INFO(LOG_MODULE, "lists: recents=%u favorites=%u",
              (unsigned)tel_last.recents.n, (unsigned)tel_last.favorites.n);
+    {   /* Which favorite fields iOS sends (counts only, no contact data); logged on change. */
+        static unsigned last_shape = ~0u;
+        unsigned num = 0, ids = 0, shape;
+        size_t i;
+        for (i = 0; i < tel_last.favorites.n; i++) {
+            if (tel_last.favorites.e[i].a[0]) num++;
+            if (tel_last.favorites.e[i].id[0]) ids++;
+        }
+        shape = ((unsigned)tel_last.favorites.n << 16) | (num << 8) | ids;
+        if (tel_last.favorites.n && shape != last_shape)
+            LOG_WARN(LOG_MODULE, "favorites=%u with number=%u with AddressBookID=%u",
+                     (unsigned)tel_last.favorites.n, num, ids);
+        last_shape = shape;
+    }
     pthread_mutex_unlock(&tel_lock);
 }
 
@@ -321,6 +351,19 @@ static void tel_on_cmd(uint16_t type, uint8_t flags, const uint8_t* p, uint32_t 
     uint16_t msg;
     (void)type; (void)flags; (void)ctx;
     if (len < 2) return;
+    if (p[0] == TEL_CMD_DIAL_CONTACT) {
+        /* A favorite without a number: iOS calls the contact by its AddressBookID. */
+        char id[TEL_TEXT_MAX];
+        uint8_t body[TEL_TEXT_MAX + 16];
+        size_t idn = len - 2 < sizeof(id) - 1 ? len - 2 : sizeof(id) - 1;
+        memcpy(id, p + 2, idn);
+        id[idn] = 0;
+        n = tel_build_initiate_call(body, sizeof(body), p[1], id);
+        r = n ? hook_inject_message(MSG_INITIATE_CALL, body, n) : HOOK_ERR_PARAM;
+        LOG_WARN(LOG_MODULE, "InitiateCall (favorite, service %u, id %u chars) %s rc=%d",
+                 (unsigned)p[1], (unsigned)idn, r == HOOK_OK ? "sent" : "not sent", (int)r);
+        return;
+    }
     switch (p[0]) {
         case TEL_CMD_MUTE:   msg = MSG_MUTE_STATUS_UPDATE; break;
         case TEL_CMD_HOLD:   msg = MSG_HOLD_STATUS_UPDATE; break;

@@ -88,14 +88,16 @@ public class TouchpadController {
     }
 
     /* Switch (GEM "Touchpad as D-pad ON / OFF"): with this marker the MMI touchpad goes to the
-     * phone exactly as stock forwards it (raw touchpad input); read at every CarPlay start. */
+     * phone exactly as stock forwards it (raw touchpad input); read at every CarPlay start and
+     * at every touchpad finger-down, so the menu applies from the next touch. */
     public static final String OFF_MARKER = "/mnt/app/carplay_touchpad_dpad.off";
     private static volatile boolean dpadEnabled = true;
 
     /** False: the caller forwards touchpad fingers the stock way instead of calling us. */
     public static boolean isDpadEnabled() { return dpadEnabled; }
 
-    private static void refreshEnabled() {
+    /** Re-reads the switch.  Callers do this only at a gesture start, never mid-drag. */
+    public static void refreshEnabled() {
         boolean on = true;
         try { on = !new java.io.File(OFF_MARKER).exists(); }
         catch (Throwable t) { /* keep the default */ }

@@ -106,6 +106,45 @@ wait
 [ "$(cat "$TEST_DIR/replaced")" = maneuver_render ]
 [ "$(cat "$TEST_DIR/spawns")" = maneuver_render ]
 
+# Power-on navigation gate: wait for Java's marker, resume across generations, cap, never twice.
+NAV_READY=$TEST_DIR/nav_ready
+NAV_GATE=$TEST_DIR/nav_gate
+NAV_WAIT_MAX_S=6
+RENDERER_LIVE=0
+ALIVE=1
+echo 100 > "$OWNER_FILE"
+gate_reset() { rm -f "$NAV_READY" "$NAV_GATE"; : > "$WLOG"; }
+sleep() { [ "$SCENARIO" = appears ] && [ "$(cat "$NAV_GATE" 2>/dev/null)" = 2 ] && : > "$NAV_READY"; :; }
+
+SCENARIO=ready; gate_reset; : > "$NAV_READY"
+gate_fail() { echo "FAIL: nav gate $SCENARIO: $1" >&2; exit 1; }
+monitor_nav_gate || gate_fail released
+[ "$(cat "$NAV_GATE")" = done ] && [ ! -s "$WLOG" ] || gate_fail 'marker present: no wait'
+
+SCENARIO=appears; gate_reset
+monitor_nav_gate || gate_fail released
+[ "$(cat "$NAV_GATE")" = done ] && grep -q 'navigation up after 4s' "$WLOG" || gate_fail 'released by marker'
+
+SCENARIO=never; gate_reset
+monitor_nav_gate || gate_fail released
+[ "$(cat "$NAV_GATE")" = done ] && grep -q 'not up after 6s; starting renderers anyway' "$WLOG" || gate_fail cap
+
+SCENARIO=again; : > "$WLOG"                     # later connect this boot: no wait, no log
+monitor_nav_gate || gate_fail released
+[ ! -s "$WLOG" ] || gate_fail 'second start waited'
+
+SCENARIO=superseded; gate_reset; echo 4 > "$NAV_GATE"; ALIVE=0
+if monitor_nav_gate; then echo 'FAIL: ended generation released the renderers' >&2; exit 1; fi
+[ "$(cat "$NAV_GATE")" = 4 ] || gate_fail 'wait not kept'   # the next generation resumes at 4 s
+ALIVE=1
+monitor_nav_gate || gate_fail released
+grep -q 'waited 4s' "$WLOG" && grep -q 'not up after 6s' "$WLOG" || gate_fail 'resume'
+
+SCENARIO=adopted; gate_reset; RENDERER_LIVE=1   # renderer already running: never hold it
+monitor_nav_gate || gate_fail released
+[ "$(cat "$NAV_GATE")" = done ] && [ ! -s "$WLOG" ] || gate_fail 'adopted renderer held'
+RENDERER_LIVE=0
+
 # Runtime supervisor code must remain out of USB/OTG and dio ownership.
 if grep -E 'media-con-ctrl|reset port|start_stack|kill .*DIO_PID' \
     "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" \

@@ -257,6 +257,7 @@ public final class ScreenModule implements Module {
     public String name() { return "screen"; }
 
     public boolean start(FrameworkRef fw) {
+        NavReadyMarker.watch();                      /* releases the renderers (carplay_monitor.sh) */
         if (fw == null || !fw.isReady() || fw.framework() == null) return false;
         if (!isPlatformSupported(fw)) {
             platformSupported = false;

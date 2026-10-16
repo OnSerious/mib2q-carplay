@@ -3,7 +3,7 @@
 #
 # Creates /mnt/app/carplay_touchpad_dpad.off. CarPlay then gets the touchpad the way the
 # stock unit sends it (raw touchpad input) instead of D-pad steps from finger drags.
-# Applies from the next CarPlay connection; run touchpad_dpad_on to revert.
+# Applies from the next touch on the touchpad; run touchpad_dpad_on to revert.
 #
 # QNX 6.5 /bin/sh is ksh; stays inside its portable subset.
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -26,4 +26,4 @@ mount -uw /mnt/app 2>/dev/null || echo "custom.sh: mount -uw /mnt/app failed"
 [ -e "$M" ] || { echo "FAILED: $M was not created"; exit 1; }
 sync
 echo "DONE. Touchpad as D-pad OFF ($M)."
-echo "Reconnect the iPhone to apply (no reboot needed)."
+echo "Applies from the next touch on the touchpad (no reconnect or reboot needed)."

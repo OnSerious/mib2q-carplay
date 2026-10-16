@@ -177,10 +177,11 @@ add_ids() {   # $1 = line holding one list, rest = IDs; prints the new line
     printf '%s\n' "$l"
 }
 # iAP2 messages the hook needs Cinemo to declare in Identify: route guidance
-# (0x52xx), telephony (0x415B/0x415C/0x415D AcceptCall/EndCall/SwapCalls, 0x415F/0x4160
+# (0x52xx), telephony (0x415A InitiateCall for favorites without a number, 0x415B/0x415C/0x415D
+# AcceptCall/EndCall/SwapCalls, 0x415F/0x4160
 # Hold/MuteStatusUpdate, 0x4170/0x4171 ListUpdates) and vehicle status (0xA100/0xA102
 # Start/StopVehicleStatusUpdates from the phone, 0xA101 VehicleStatusUpdate from the hook).
-DIO_SENT_IDS="0x5200 0x5203 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0xA101"
+DIO_SENT_IDS="0x5200 0x5203 0x415A 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0xA101"
 DIO_RECV_IDS="0x5201 0x5202 0x5204 0x4171 0xA100 0xA102"
 # "nmea":"0xNNNN" is the NMEA bitmask dio advertises in Identify (LocationInformationComponent).
 # Bit 0x08 = PASCD (VehicleSpeedData): the hook supplies the wheel-speed sentences.

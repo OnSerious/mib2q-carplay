@@ -999,7 +999,7 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
              * never inject touchpad coordinates into the DSI touchscreen stream (or vice versa).
              * Active-finger count uses getTouchState()!=1 (1 = RELEASED). */
             TouchpadController c = TouchpadController.getInstance();
-            if (atouchevent == null || atouchevent.length == 0) { c.onTouchEnd(); return; }
+            if (atouchevent == null || atouchevent.length == 0) { padTouching = false; c.onTouchEnd(); return; }
 
             ArrayList screen = new ArrayList(atouchevent.length);
             int screenActive = 0;
@@ -1018,6 +1018,11 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                     }
                 }
             }
+            /* Finger-down on the touchpad: pick up a GEM switch change from the next touch, not
+             * the next CarPlay connection.  Never mid-gesture, so a drag keeps one path. */
+            boolean padDown = padActive > 0;
+            if (padDown && !padTouching) TouchpadController.refreshEnabled();
+            padTouching = padDown;
             if (!screen.isEmpty()) {
                 Collections.sort(screen, new TouchXComparator());
                 this.this$0.dsiCarplaySafe.postTouchEvent(
@@ -1042,6 +1047,9 @@ public class CarplayDSILifecycleController extends AbstractDSIController impleme
                 c.onTouchEnd();
             }
         }
+
+        /** A touchpad finger was down in the previous batch (gesture in progress). */
+        private boolean padTouching;
 
         /** Stock updateTouchEvents orders fingers left-to-right before DSI serialization. */
         private final class TouchXComparator implements Comparator {

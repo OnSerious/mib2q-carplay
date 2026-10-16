@@ -19,6 +19,19 @@ int aa_marker(const char *path) { return daynight && !strcmp(path, AA_MARKER_DAY
 
 #define V2(v) (unsigned char)(0x80 | ((v) & 0x7f)), (unsigned char)((v) >> 7)
 
+/* MessageRouter::queueOutgoing, found by relayout_send through dlsym like on the car. */
+static int queued;
+static unsigned char queued_msg[64];
+static unsigned queued_len, queued_channel;
+void _ZN13MessageRouter13queueOutgoingEhPvj(void *router, unsigned char channel, void *data, unsigned len)
+{
+    (void)router;
+    queued++;
+    queued_channel = channel;
+    queued_len = len < sizeof(queued_msg) ? len : (unsigned)sizeof(queued_msg);
+    memcpy(queued_msg, data, queued_len);
+}
+
 static void put(const char *path, const char *text)
 {
     FILE *f = fopen(path, "w");
@@ -104,8 +117,35 @@ int main(void)
     check_view(0, full, sizeof(full) - 2);
     unlink(AA_FILE_INSETS);
     unlink(AA_FILE_DPI);
+
+    /* Issue #19: a theme change mid-session is never sent (the phone drops Android Auto);
+     * a later view change still goes out, with the theme the session connected with. */
+    {
+        unsigned char sink[16] = {0};
+        sink[4] = 1;                          /* channel open */
+        sink[5] = 64;                         /* cluster video channel */
+        wr(sink, 8, 0x1234u);                 /* router (opaque to the fake) */
+        conn_view = 0;
+        conn_theme = UI_THEME_DARK;           /* connected at night */
+        daynight = 1;
+        put(AA_VIEW_PATH, "full   \n");
+        put(AA_THEME_PATH, "day  \n");       /* MMI switched to day */
+        queued = 0;
+        aa_relayout_tick(sink);               /* reads both records */
+        aa_relayout_tick(sink);
+        assert(queued == 0);                  /* theme change alone: nothing sent */
+        usleep(350000);                       /* past the 300 ms read gate */
+        put(AA_VIEW_PATH, "classic\n");
+        aa_relayout_tick(sink);               /* view change picked up */
+        aa_relayout_tick(sink);               /* ... and sent */
+        assert(queued == 1 && queued_channel == 64);
+        assert(queued_msg[0] == 0x80 && queued_msg[1] == 0x09);
+        assert(queued_msg[queued_len - 2] == 0x20 && queued_msg[queued_len - 1] == UI_THEME_DARK);
+        daynight = 0;
+        unlink(AA_THEME_PATH);
+    }
     unlink(AA_VIEW_PATH);
 
-    printf("aa_uiconfig_test: full/classic/sport 0x8009 bytes, view record, density, insets file, day/night theme PASS\n");
+    printf("aa_uiconfig_test: full/classic/sport 0x8009 bytes, view record, density, insets file, day/night theme, no mid-session theme change (#19) PASS\n");
     return 0;
 }

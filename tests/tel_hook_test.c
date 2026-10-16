@@ -24,7 +24,7 @@ void bus_text_str(bus_text_builder_t* b, const char* k, const char* v) { (void)b
 void bus_text_bool(bus_text_builder_t* b, const char* k, bool v) { (void)b; (void)k; (void)v; }
 hook_result_t bus_send_text(uint16_t t, uint8_t f, bus_text_builder_t* b) { (void)t; (void)f; (void)b; return HOOK_OK; }
 static uint16_t sent_msg;
-static uint8_t sent_payload[32];
+static uint8_t sent_payload[96];
 static size_t sent_len;
 static int sent_count;
 hook_result_t hook_inject_message(uint16_t m, const uint8_t* p, size_t n) {
@@ -118,6 +118,21 @@ int main(void) {
         assert(sent_count == before + 1 && sent_msg == 0x415D && sent_len == 0);  /* SwapCalls, no params */
     }
     {
+        /* Favorite without a number: InitiateCall Type 0, Service 1, AddressBookID (NUL-terminated). */
+        static const uint8_t dial[] = "\x06\x01" "7D19170A-959C-4204-AC2A-6BE3864DCCBC";
+        static const uint8_t want[] =
+            "\x00\x05\x00\x00\x00" "\x00\x05\x00\x02\x01"
+            "\x00\x29\x00\x03" "7D19170A-959C-4204-AC2A-6BE3864DCCBC";
+        int before = sent_count;
+        cmd_handler(CMD_TEL, 0, dial, sizeof(dial) - 1, NULL);
+        assert(sent_count == before + 1 && sent_msg == 0x415A);
+        assert(sent_len == sizeof(want) && memcmp(sent_payload, want, sizeof(want)) == 0);
+        cmd_handler(CMD_TEL, 0, dial, 2, NULL);                  /* no AddressBookID: nothing sent */
+        assert(sent_count == before + 1);
+        n = tel_build_initiate_call(buf, sizeof(buf), 0, "x");   /* service 0: param omitted */
+        assert(n == 5 + 6 && memcmp(buf, "\x00\x05\x00\x00\x00\x00\x06\x00\x03x", 11) == 0);
+    }
+    {
         const uint8_t bad[2] = { 9, 0 };
         int before = sent_count;
         cmd_handler(CMD_TEL, 0, bad, 2, NULL);
@@ -142,6 +157,7 @@ int main(void) {
     assert(strcmp(l.recents.e[0].b, "Alice Test") == 0);
     assert(l.recents.e[0].type == 2 && l.recents.e[0].timestamp == 0x69EC6754ULL);
     assert(l.recents.e[0].occurrences == 2 && l.recents.e[2].occurrences == 7);
+    assert(strcmp(l.recents.e[0].id, "7D19170A-959C-4204-AC2A-6BE3864DCCBC") == 0 && l.recents.e[0].service == 3);
     assert(strcmp(l.recents.e[1].a, "+8613800000002") == 0 && strcmp(l.recents.e[1].b, "+86 138 0000 0002") == 0);
     assert(l.recents.e[2].index == 2 && l.recents.e[2].timestamp == 0x69457538ULL);
     tel_merge_lists(&last, &l);

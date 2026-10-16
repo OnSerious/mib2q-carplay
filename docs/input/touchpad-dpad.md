@@ -20,9 +20,12 @@ the only input device stock leaves unbridged** - this patch adds the missing leg
 ## 🔧 Switch
 
 `/mnt/app/carplay_touchpad_dpad.off` (GEM *Touchpad as D-pad OFF*, mods `touchpad_dpad_on/off`)
-turns the bridge off from the next CarPlay connection: touchpad fingers then go to CarPlay
-exactly as stock sends them (raw coordinates, DSI touch input 0), and `TouchpadController`
-emits nothing. Read in `setTouchSink`, i.e. at every CarPlay start.
+turns the bridge off from the next touch: touchpad fingers then go to CarPlay exactly as stock
+sends them (raw coordinates, DSI touch input 0), and `TouchpadController` emits nothing. This is
+the native Audi behaviour, not "touchpad off": stock advertises a touchpad to iOS
+(`inputFeatures` bit 8), so iOS itself still moves focus and scrolls with it. Read in
+`setTouchSink` (every CarPlay start) and at every touchpad finger-down (`updateTouchEvents`),
+never mid-drag, so one gesture always stays on one path.
 
 ## 🔍 Model
 

@@ -72,8 +72,17 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
   (stage file + `mv`). A monitor acts only while `monitor_current` holds - the owner file names its
   dio PID **and** that PID is alive. A newer generation overwrites the file, so an older monitor
   goes quiet at once instead of fighting over the renderer.
-- The monitor adopts or starts `maneuver_render` **immediately** (no settle sleeps: the renderer never
-  gates dio, and it must be ready before Java selects the cluster context). Then every 2 s it
+- The monitor adopts or starts `maneuver_render` **immediately** (the renderer never gates dio, and
+  it must be ready before Java selects the cluster context), except for the **first start after
+  power-on**: then it waits for `/tmp/carplay_nav_ready`, which Java's `NavReadyMarker` writes once
+  the `Navigation` singleton exists, at most 90 s in total (`NAV_WAIT_MAX_S`; the seconds waited are
+  kept in `/tmp/carplay_renderer_gate`, so a replaced generation resumes the wait). With a phone
+  connected at power-on, native navigation missed the service manager's ~60 s start deadline and
+  was relaunched (carplay_logs 024, 027: `navStartup -sm-restart 1` at ~93 s) or never came back
+  (022); the renderers are useless before navigation exists anyway (route guidance waits for it),
+  so they are kept out of that window. A running renderer or a later connect never waits. The
+  wrapper log shows `holding renderers until native navigation is up` and how long it took.
+  Then every 2 s it
   restarts a missing renderer after a 5 s backoff, re-checking ownership before it spawns, and caps
   `/tmp/maneuver_render.log` and `/tmp/carplay_wrapper.log` at 512 KiB about every 5 min.
 - When dio exits the monitor exits too and **leaves `maneuver_render` alive**, so a replacement

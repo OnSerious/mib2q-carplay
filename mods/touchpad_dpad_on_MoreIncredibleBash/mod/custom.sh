@@ -2,7 +2,7 @@
 # M.I.B. -> Advanced Settings -> Run Custom Script: MMI touchpad as D-pad ON (default).
 #
 # Removes /mnt/app/carplay_touchpad_dpad.off: finger drags on the MMI touchpad move the
-# CarPlay selection again. Applies from the next CarPlay connection.
+# CarPlay selection again. Applies from the next touch on the touchpad.
 #
 # QNX 6.5 /bin/sh is ksh; stays inside its portable subset.
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -28,4 +28,4 @@ if [ -e "$M" ]; then
 fi
 sync
 echo "DONE. Touchpad as D-pad ON."
-echo "Reconnect the iPhone to apply (no reboot needed)."
+echo "Applies from the next touch on the touchpad (no reconnect or reboot needed)."
