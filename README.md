@@ -77,6 +77,7 @@ built against your own unit's HMI, but cluster geometry may need calibration.
 | --- | --- | --- |
 | `MHI2Q_ER_AUG22_P5152` | Audi A5 (F5), MU1329 | development unit; all features tested |
 | `MHI2Q_ER_AUG22_P5092` | MU1329 | wireless CarPlay tested, [report](https://github.com/kamgurgul/mib2q-carplay/issues/5) |
+| `MHI2Q_US_AUG22_P5087` | Audi A5 Sportback (B9, US, 2018), MU1316 | release 1.1, wired CarPlay, Apple Maps on the Virtual Cockpit, [report](https://github.com/kamgurgul/mib2q-carplay/issues/21) |
 
 ## Tested wireless adapters
 
@@ -319,12 +320,6 @@ The Java suites need `stock/base.jar` and a host JDK 8 in `stock/jdk/` (or set `
 | `docs/` | knowledge base; start at [`docs/INDEX.md`](docs/INDEX.md) |
 | `stock/` | not in Git: your `lsd.jxe`, `base.jar`, libs, test JDK |
 | `build/` | build outputs (not in Git) |
-
-## TODO
-
-- [ ] **Android Auto on other firmware.** The cluster map needs a receiver profile per `gal`
-  build ([`docs/android-auto/firmware-porting.md`](docs/android-auto/firmware-porting.md));
-  turn-by-turn and cover art work without one.
 
 ## Credits
 
