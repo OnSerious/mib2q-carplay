@@ -136,14 +136,16 @@ int main(int argc, char** argv) {
     /* Route C: a reroute (no reset, so iOS keeps its sent-cache) whose new lane
      * source is numbered from 0 again.  Its window arrives while the old current
      * event (44) is still active and must survive until its own 0x5201; later
-     * the new events 44..49 replace route A's events with the same numbers. */
+     * the new events 44..49 replace route A's events with the same numbers.
+     * Lane content repeats every 15 seeds, so the offset must not be a multiple
+     * of 15 or stale route A lanes would look identical to route C's. */
     update(5, 200, 44, 0); expect(-1, 0);
-    for (e = 0; e < 6; e++) lane_event(e, 300 + e);
+    for (e = 0; e < 6; e++) lane_event(e, 307 + e);
     for (e = 0; e < 45; e++) {
         int first = 200 + 2 * e;
         maneuver(first + 6); maneuver(first + 7);
-        if (e > 0) lane_event(e + 5, 300 + e + 5);
-        update(1, first, e, 1); expect(e, 300 + e);
+        if (e > 0) lane_event(e + 5, 307 + e + 5);
+        update(1, first, e, 1); expect(e, 307 + e);
         update(1, first + 1, e, 0); expect(-1, 0);
     }
 
