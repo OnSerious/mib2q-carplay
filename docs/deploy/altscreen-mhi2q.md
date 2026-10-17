@@ -113,8 +113,8 @@ Calibration from the GEM **CarPlay-RGI** page:
 2. Put `x=`/`y=`/`w=`/`h=` in `carplay_safearea.conf`, `carplay_safearea_small.conf` and/or
    `carplay_safearea_sport.conf` in the card root, press *Apply SafeArea from SD*, reconnect.
 3. *Reset SafeArea to built-in* returns to the table above. *Classic-view SafeArea ON / OFF*
-   falls back to a single ViewArea. Index 2 is the Sport layout's own ViewArea (default); *Sport own ViewArea ON / OFF*
-   (off marker `/mnt/app/root/mibr-carplay111-viewareas.sport.off`) drops it and Sport uses classic.
+   falls back to a single ViewArea. *Sport own ViewArea ON / OFF* (marker `/mnt/app/root/mibr-carplay111-viewareas.sport`)
+   adds index 2 for the Sport layout; without it Sport uses classic.
 
 The hook logs what it advertised: `GEN2 ViewArea[n] wide|classic|sport area=... safe=...` and
 `gen2 view area -> n`.
@@ -192,7 +192,7 @@ Renderer (`altscreen_render`):
 | `ALTR_LIVE_TIMEOUT_MS` | 500 | heartbeat removed if no frame within this |
 | `ALTR_STATUS_FILE` | `/tmp/altscreen_render.status` | `state=`, size, `frames=` |
 | `/mnt/app/root/altscreen_render.hwdecode.off` | absent | software decode (GEM *HW decoder ON / OFF*); `/tmp/…` for this boot only |
-| `/mnt/app/root/altscreen_render.hwdecode.immediate` | absent | absent: CarPlay waits `ALTR_HW_MIN_UPTIME_S` (120 s) before hardware decode; present: hardware at once (GEM *HW decoder 2-min delayed start* OFF). Android Auto always waits |
+| `/mnt/app/root/altscreen_render.hwdecode.delayed` | absent | CarPlay waits `ALTR_HW_MIN_UPTIME_S` (120 s) before hardware decode (GEM *HW decoder 2-min delayed start*); Android Auto always waits |
 
 The renderer runs at QNX priority 15 (like `maneuver_render`): at the default 10 the compositor's
 workers can stall every renderer thread for 300-650 ms at once (measured upstream, 2026-10-09).

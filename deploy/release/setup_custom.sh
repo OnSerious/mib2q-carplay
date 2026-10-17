@@ -32,6 +32,17 @@ echo "mib2q-carplay $VERSION setup"
     exit 1
 }
 
+# q7 builds: start from a clean unit, every switch at its default (mod/clean/q7_clean.sh).
+if [ -f "$D/clean/q7_clean.sh" ]; then
+    echo "=== 0/2 Alles entfernen: alte CarPlay-Dateien und alle Schalter ==="
+    /bin/sh "$D/clean/q7_clean.sh" || {
+        echo ""
+        echo "STOPP: Aufraeumen hatte ein PROBLEM (siehe oben). Es wurde NICHTS installiert."
+        echo "Nicht neu starten - Foto schicken (Log: q7_clean_log.txt auf der Karte)."
+        exit 1
+    }
+fi
+
 echo "=== 1/2 Install CarPlay ==="
 CP_INSTALL_RES=$CARD/carplay
 export CP_INSTALL_RES

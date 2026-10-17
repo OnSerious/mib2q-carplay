@@ -21,31 +21,33 @@ ON_UNIT=/mnt/app/eso/hmi/engdefs/scripts/carplay
 
 # button script | run.sh action | GEM label
 BUTTONS="
-install|install|Install / update CarPlay (release on SD)
-logs|logs|Save logs to SD (+ verbose on)
-altscreen_on|altscreen_on|Cluster video (AltScreen) ON
-altscreen_off|altscreen_off|Cluster video (AltScreen) OFF
-rgd_enable|rgd_enable|Route guidance ON
-rgd_disable|rgd_disable|Route guidance OFF
-grid|grid|Calibration grid ON / OFF (toggle)
-safearea|safearea|Apply SafeArea from SD (carplay_safearea*.conf)
-safearea_reset|safearea_reset|Reset SafeArea to built-in
-singleview|singleview|Classic-view SafeArea ON / OFF (2 ViewAreas)
-sportview|sportview|Sport own ViewArea ON / OFF (toggle, default ON)
-appcard|appcard|App turn card on cluster during route ON / OFF (toggle, default OFF)
-reacquire|reacquire|Re-request cluster map (test app switching)
-hwdec|hwdec|HW decoder ON / OFF (toggle, default ON)
-hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default ON)
-aa_cluster_on|aa_cluster_on|Android Auto cluster map ON
-aa_cluster_off|aa_cluster_off|Android Auto cluster map OFF
-aa_daynight|aa_daynight|Android Auto cluster day/night ON / OFF (toggle, opt-in, test)
-touchpad_dpad_on|touchpad_dpad_on|Touchpad as D-pad ON (CarPlay, default)
-touchpad_dpad_off|touchpad_dpad_off|Touchpad as D-pad OFF (stock touchpad)
-siri_short|siri_short|Siri on short voice-key press ON / OFF (toggle, CarPlay, default OFF)
-omxprobe|omxprobe|HW decoder probe (OMX, logs only)
-lsd|lsd|Copy stock lsd.jxe to SD
-uninstall|uninstall|Uninstall CarPlay (restore stock)
-remove_menu|remove_menu|Remove this menu
+install|install|CarPlay installieren / aktualisieren (Release auf der SD-Karte)
+logs|logs|Logs auf SD-Karte speichern (schaltet ausfuehrliches Log an)
+status|status|Status anzeigen: welche Schalter gesetzt sind
+longpress|longpress|Langdruck linke Walze = Original-Audi-Karte AN / AUS (Standard AN)
+appcard|appcard|App-Abbiegekarte im Tacho waehrend Route AN / AUS (Standard AUS)
+sportview|sportview|Eigener Kartenbereich im Sport-Layout AN / AUS (Standard AUS)
+altscreen_on|altscreen_on|CarPlay-Karte im Tacho AN
+altscreen_off|altscreen_off|CarPlay-Karte im Tacho AUS
+rgd_enable|rgd_enable|Abbiegehinweise im Tacho (Route Guidance) AN
+rgd_disable|rgd_disable|Abbiegehinweise im Tacho (Route Guidance) AUS
+hwdec|hwdec|Hardware-Decoder AN / AUS (Standard AN)
+hwdelay|hwdelay|Hardware-Decoder erst 2 Min nach MMI-Start AN / AUS (Standard AUS)
+siri_short|siri_short|Siri bei kurzem Druck der Sprachtaste AN / AUS (Standard AUS)
+touchpad_dpad_on|touchpad_dpad_on|Touchpad als Steuerkreuz AN (CarPlay, Standard)
+touchpad_dpad_off|touchpad_dpad_off|Touchpad als Steuerkreuz AUS (Original-Touchpad)
+aa_cluster_on|aa_cluster_on|Android-Auto-Karte im Tacho AN
+aa_cluster_off|aa_cluster_off|Android-Auto-Karte im Tacho AUS
+aa_daynight|aa_daynight|Android-Auto-Tachokarte Tag/Nacht AN / AUS (Test, Standard AUS)
+singleview|singleview|Nur ein Kartenbereich (breit) AN / AUS (Fehlersuche, Standard AUS)
+grid|grid|Kalibrier-Gitter AN / AUS
+safearea|safearea|Kartenrand von SD-Karte uebernehmen (carplay_safearea*.conf)
+safearea_reset|safearea_reset|Kartenrand auf Standard zuruecksetzen
+reacquire|reacquire|Tachokarte neu anfordern (Test App-Wechsel)
+omxprobe|omxprobe|Hardware-Decoder-Pruefung (nur fuer Logs)
+lsd|lsd|Original lsd.jxe auf SD-Karte kopieren
+uninstall|uninstall|CarPlay deinstallieren (Original wiederherstellen)
+remove_menu|remove_menu|Dieses Menue entfernen
 "
 # mod folders bundled as actions/<name>/custom.sh
 ACTIONS="install uninstall logging extract_lsd altscreen_on altscreen_off rgd_enable rgd_disable altscreen_grid altscreen_safearea aa_cluster_on aa_cluster_off touchpad_dpad_on touchpad_dpad_off"
@@ -71,7 +73,7 @@ ESD="$OUT/mib2q-carplay.esd"
     echo
     echo "keyValue"
     echo "    value   String sys 0x00000000 0"
-    echo "    label   \"Same scripts as the M.I.B. mods. Install needs the release on SD in /mod/carplay/.\""
+    echo "    label   \"kamgurgul mib2q-carplay + Q7-Zusaetze. Standard = kamgurgul. Status zeigt die Schalter.\""
     echo "    poll    0"
 } > "$ESD"
 

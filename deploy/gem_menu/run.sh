@@ -112,27 +112,25 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. ViewAreas wide + classic + sport from the next CarPlay connection."
+            echo "FERTIG. Kartenbereiche breit + klassisch (+ Sport, falls an) ab der naechsten CarPlay-Verbindung."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Single ViewArea (wide only) from the next CarPlay connection."
+            echo "FERTIG. Nur ein Kartenbereich (breit) ab der naechsten CarPlay-Verbindung."
         fi
         ;;
     sportview)
-        # Default: own ViewArea for the Sport layout's small map (x=590 y=88 350x296), so
-        # Apple Maps keeps its turn card inside it. The off marker gives Sport the classic
-        # ViewArea (upstream). Read when the AltScreen hook starts its profile.
-        M=/mnt/app/root/mibr-carplay111-viewareas.sport.off
+        # Opt-in: own ViewArea for the Sport layout's small map (x=590 y=88 350x296),
+        # instead of the classic one. Read when the AltScreen hook starts its profile.
+        M=/mnt/app/root/mibr-carplay111-viewareas.sport
         mount -uw /mnt/app 2>/dev/null
-        rm -f /mnt/app/root/mibr-carplay111-viewareas.sport   # opt-in marker of q7h..q7k
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Sport gets its own ViewArea (default). Reconnect the phone; if nothing changes, restart the MMI."
+            echo "FERTIG. Eigener Sport-Kartenbereich AUS (Standard): Sport nutzt den klassischen Bereich. iPhone neu anstecken; wenn sich nichts aendert, MMI neu starten."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Sport uses the classic ViewArea. Reconnect the phone; if nothing changes, restart the MMI."
+            echo "FERTIG. Eigener Sport-Kartenbereich AN. iPhone neu anstecken; wenn sich nichts aendert, MMI neu starten."
         fi
         ;;
     appcard)
@@ -143,12 +141,48 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Route guidance: map only, our arrow (default). Applies from the next route start."
+            echo "FERTIG. App-Abbiegekarte AUS (Standard): bei Route nur Karte + Pfeil. Gilt ab dem naechsten Routenstart."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Route guidance: app turn card stays on the cluster map. Applies from the next route start."
+            echo "FERTIG. App-Abbiegekarte AN: die Abbiegekarte der App bleibt im Tacho. Gilt ab dem naechsten Routenstart."
         fi
+        ;;
+    longpress)
+        # Ours (q7): a long press of the left steering-wheel roller toggles the cluster between
+        # the phone's map and the stock Audi map. On by default; the marker turns it off.
+        # Read on every long press, so it applies at once.
+        M=/mnt/app/carplay_longpress_map.off
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "FERTIG. Langdruck linke Walze -> Original-Audi-Karte AN (Standard). Gilt sofort."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "FERTIG. Langdruck linke Walze -> Original-Audi-Karte AUS. Gilt sofort."
+        fi
+        ;;
+    status)
+        # Ours (q7): which switches are set (absent marker = default).
+        on_off() { if [ -e "$2" ]; then echo "$1: $3"; else echo "$1: $4"; fi; }
+        on_off "Langdruck -> Audi-Karte" /mnt/app/carplay_longpress_map.off "AUS" "AN (Standard)"
+        on_off "App-Abbiegekarte" /mnt/app/root/mibr-carplay111-rgi-url.disabled "AN" "AUS (Standard)"
+        on_off "Eigener Sport-Kartenbereich" /mnt/app/root/mibr-carplay111-viewareas.sport "AN" "AUS (Standard)"
+        on_off "Nur ein Kartenbereich" /mnt/app/root/mibr-carplay111-viewareas.single "AN" "AUS (Standard)"
+        on_off "CarPlay-Karte im Tacho" /mnt/app/mibr-carplay111.noadvertise "AUS" "AN (Standard)"
+        on_off "Android-Auto-Bruecke" /mnt/app/carplay_aa.disabled "AUS" "AN (Standard)"
+        on_off "Abbiegehinweise" /mnt/app/carplay_rgd.disabled "AUS" "AN (Standard)"
+        on_off "Hardware-Decoder" /mnt/app/root/altscreen_render.hwdecode.off "AUS" "AN (Standard)"
+        on_off "2-Min-Verzoegerung Decoder" /mnt/app/root/altscreen_render.hwdecode.delayed "AN" "AUS (Standard)"
+        on_off "Siri kurz" /mnt/app/carplay_siri_short.on "AN" "AUS (Standard)"
+        on_off "Touchpad als Steuerkreuz" /mnt/app/carplay_touchpad_dpad.off "AUS" "AN (Standard)"
+        on_off "Android-Auto-Tachokarte" /mnt/app/root/aa_cluster.off "AUS" "AN (Standard)"
+        on_off "Android-Auto Tag/Nacht" /mnt/app/root/aa_cluster.daynight "AN" "AUS (Standard)"
+        on_off "Ausfuehrliches Log" /mnt/app/carplay_verbose "AN" "AUS (Standard)"
+        for f in mibr-carplay111-safearea.conf mibr-carplay111-safearea-small.conf mibr-carplay111-safearea-sport.conf; do
+            [ -e "/mnt/app/root/$f" ] && echo "Eigener Kartenrand gesetzt: $f"
+        done
         ;;
     grid)
         run_action altscreen_grid
@@ -163,28 +197,27 @@ case $ACT in
         rm -f /mnt/app/root/altscreen_render.hwdecode   # opt-in marker of older builds
         if [ -e "$M" ] || [ -e "$B" ]; then
             rm -f "$M" "$B"; sync
-            echo "DONE. Hardware decoder ON (default) from the next CarPlay connection."
+            echo "FERTIG. Hardware-Decoder AN (Standard) ab der naechsten CarPlay-Verbindung."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Hardware decoder OFF (software decode) from the next CarPlay connection."
+            echo "FERTIG. Hardware-Decoder AUS (Software) ab der naechsten CarPlay-Verbindung."
         fi
         ;;
     hwdelay)
-        # Default: CarPlay waits 2 minutes after an MMI start before the hardware decoder
-        # (software decode until then): opening it early froze a Q7 (#22, like #10/#14).
-        # The marker starts CarPlay on the hardware decoder at once (upstream). Android Auto
-        # always waits (issue #14). Read per CarPlay connection.
-        M=/mnt/app/root/altscreen_render.hwdecode.immediate
+        # CarPlay starts on the hardware decoder at once (no switch, no blink). This marker
+        # brings back the 2-minute wait after an MMI start (software decode until then),
+        # for units that freeze when the decoder opens early (issue #10). Android Auto always
+        # waits (issue #14). Read per CarPlay connection.
+        M=/mnt/app/root/altscreen_render.hwdecode.delayed
         mount -uw /mnt/app 2>/dev/null
-        rm -f /mnt/app/root/altscreen_render.hwdecode.delayed   # opt-in marker of q7j/q7k
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. CarPlay hardware decoder waits 2 minutes after an MMI start (default) from the next connection."
+            echo "FERTIG. 2-Min-Verzoegerung AUS (Standard): Hardware-Decoder startet sofort, ab der naechsten Verbindung."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. CarPlay hardware decoder starts at once from the next connection."
+            echo "FERTIG. 2-Min-Verzoegerung AN: Hardware-Decoder erst 2 Min nach MMI-Start (bis dahin Software)."
         fi
         ;;
     siri_short)
@@ -195,11 +228,11 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Short voice-key press: car voice control (default). Long press: Siri."
+            echo "FERTIG. Sprachtaste kurz: Audi-Sprachbedienung (Standard). Lang: Siri."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Short voice-key press: Siri while CarPlay is connected."
+            echo "FERTIG. Sprachtaste kurz: Siri, solange CarPlay verbunden ist."
         fi
         ;;
     aa_daynight)
@@ -210,20 +243,20 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         if [ -e "$M" ]; then
             rm -f "$M"; sync
-            echo "DONE. Android Auto cluster map always dark (default)."
+            echo "FERTIG. Android-Auto-Tachokarte immer dunkel (Standard)."
         else
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
-            echo "DONE. Android Auto cluster map follows MMI day/night (opt-in)."
-            echo "If Android Auto on the phone crashes, press this again to turn it off."
+            echo "FERTIG. Android-Auto-Tachokarte folgt Tag/Nacht des MMI (Test)."
+            echo "Stuerzt Android Auto am Handy ab: diesen Punkt nochmal druecken (wieder aus)."
         fi
-        echo "Applies at the next phone connection (a day/night change while connected waits for it too)."
+        echo "Gilt ab der naechsten Handy-Verbindung."
         ;;
     reacquire)
         # Test: re-send the cluster showUI in the running session, so iOS picks
         # which navigation app draws the VC map again (/tmp, consumed by the hook).
         : > /tmp/mibr-alt111-gen2-reacquire || { echo "FAILED: cannot create the marker"; exit 1; }
-        echo "DONE. Cluster map re-requested (watch the VC; altscreen111.log: explicit reacquire)."
+        echo "FERTIG. Tachokarte neu angefordert."
         ;;
     omxprobe)
         # altscreen_render consumes the marker within ~1 s and logs the Qualcomm
@@ -231,8 +264,8 @@ case $ACT in
         mount -uw /mnt/app 2>/dev/null
         : > /mnt/app/root/altscreen_render.omxprobe || { echo "FAILED: cannot create the probe marker"; exit 1; }
         sync
-        echo "DONE. Probe requested; altscreen_render runs it within ~1 s."
-        echo "Then press 'Save logs to SD' and send altscreen_render.log."
+        echo "FERTIG. Test angefordert, laeuft in ca. 1 s."
+        echo "Danach 'Logs auf SD speichern' druecken."
         ;;
     uninstall|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|touchpad_dpad_on|touchpad_dpad_off)
         run_action "$ACT"
@@ -246,10 +279,10 @@ case $ACT in
             echo "FAILED: menu files still present (is /mnt/app read-only?)"
             exit 1
         fi
-        echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
+        echo "FERTIG. Menue entfernt; verschwindet nach dem naechsten Neustart."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|appcard|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|appcard|longpress|status|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac

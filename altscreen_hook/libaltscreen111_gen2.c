@@ -151,9 +151,8 @@
  * canvas than in classic. The commercial MHI2Q package's third table entry is
  * 114,88,350x296 in screen pixels of the window; with plane 99 moved by -476 the
  * same spot is canvas x 114+476 = 590 (114 on the moved plane put the puck left
- * of the cluster on a Q7). Default on (Apple Maps keeps its turn card inside the small
- * window instead of under the gauges); /mnt/app/root/mibr-carplay111-viewareas.sport.off
- * falls back to the classic ViewArea for sport. Override with
+ * of the cluster on a Q7). Opt-in: advertised only while
+ * /mnt/app/root/mibr-carplay111-viewareas.sport exists. Override with
  * /mnt/app/root/mibr-carplay111-safearea-sport.conf.
  */
 #define ALT111_DEFAULT_SPORT_SAFE_X 590
@@ -2374,11 +2373,11 @@ done:
  * command_update_view). A smaller view-1 rect was tried (log set 015) and is
  * inert, as joeyQuery/MHI2-altScreen also found. The marker below falls back to
  * the single view.
- * View 2 = sport small map window (CMD_ALT_ZONE mode 1), advertised unless the
- * sport-off marker exists; then sport uses view 1 (classic) as upstream.
+ * View 2 = sport small map window (CMD_ALT_ZONE mode 1), opt-in: advertised only
+ * while the sport marker exists; otherwise sport uses view 1 (classic) as before.
  */
 static const char *g_single_view_marker = "/mnt/app/root/mibr-carplay111-viewareas.single";
-static const char *g_sport_view_off_marker = "/mnt/app/root/mibr-carplay111-viewareas.sport.off";
+static const char *g_sport_view_marker = "/mnt/app/root/mibr-carplay111-viewareas.sport";
 static int g_view_count = 1;
 static volatile int g_desired_view;
 
@@ -2387,7 +2386,7 @@ static int configured_view_count(void)
 #ifdef ALT111_DEFAULT_SMALL_SAFE_W
     if(access(g_single_view_marker,F_OK)==0) return 1;
 #ifdef ALT111_DEFAULT_SPORT_SAFE_W
-    if(access(g_sport_view_off_marker,F_OK)!=0) return 3;
+    if(access(g_sport_view_marker,F_OK)==0) return 3;
 #endif
     return 2;
 #else

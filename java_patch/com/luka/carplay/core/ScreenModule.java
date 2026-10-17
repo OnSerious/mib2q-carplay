@@ -161,6 +161,10 @@ public final class ScreenModule implements Module {
         boolean stock;
         synchronized (LOCK) {
             if (!platformSupported || !connected || !altScreenActive) return;  /* no phone video to hide */
+            if (!userStockMap && !LongPressMap.isEnabled()) {
+                Log.i(TAG, "MFW long press: stock-map toggle switched off (" + LongPressMap.OFF_MARKER + ")");
+                return;
+            }
             userStockMap = !userStockMap;
             stock = userStockMap;
         }

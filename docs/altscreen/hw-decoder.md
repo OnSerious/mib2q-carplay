@@ -83,10 +83,10 @@ Hung video hardware (issue #14):
 
 - **Boot settle time.** No hardware decoder before 120 s of uptime (`ALTR_HW_MIN_UPTIME_S`).
   A session that starts earlier decodes in software, then reconnects to the tee once at 120 s
-  and switches to hardware. Always for **Android Auto** (#14). **CarPlay** waits too by
-  default: a Q7 (MU1329) froze with the decoder opened 2-4 min after boot (#22, like #10/#14).
-  The marker `/mnt/app/root/altscreen_render.hwdecode.immediate` (GEM *HW decoder 2-min delayed
-  start* OFF) starts it on hardware at once, like upstream mib2q-carplay-rgi (no switch, no blink). `.live` is refreshed for up to 3 s until the first hardware picture,
+  and switches to hardware. Always for **Android Auto** (#14). **CarPlay** starts on hardware at
+  once, like upstream mib2q-carplay-rgi (no switch, so no blink); the marker
+  `/mnt/app/root/altscreen_render.hwdecode.delayed` (GEM *HW decoder 2-min delayed start*) gives
+  it the wait, for units that freeze when the decoder opens early (#10, cause not proven). `.live` is refreshed for up to 3 s until the first hardware picture,
   also while the decoder setup blocks (from the watchdog thread), so the cockpit does not flip
   back to the Audi map (issue #9: it showed for ~0.3 s while `.live` aged past Java's 1 s limit).
 - **Wedged decoder.** A state change that times out, or an OMX `Timeout` / `Hardware` error,

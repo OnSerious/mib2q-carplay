@@ -56,6 +56,13 @@ cp "$MODS/install_MoreIncredibleBash/mod/command.sh" "$OUT/SD-CARD/mod/command.s
 cp "$MODS/install_MoreIncredibleBash/mod/custom.sh" "$OUT/SD-CARD/mod/install/custom.sh"
 cp "$MODS/menu_install_MoreIncredibleBash/mod/custom.sh" "$OUT/SD-CARD/mod/menu/custom.sh"
 cp -R "$MODS/menu_install_MoreIncredibleBash/mod/carplay_menu" "$OUT/SD-CARD/mod/menu/"
+# q7: step 0 of the setup cleans the unit; Q7_STOCK_DEVA (a local copy of the unit's stock
+# audio driver, never in git) adds the driver check.
+mkdir -p "$OUT/SD-CARD/mod/clean"
+cp "$PROJECT_DIR/deploy/release/q7_clean.sh" "$OUT/SD-CARD/mod/clean/q7_clean.sh"
+if [ -n "${Q7_STOCK_DEVA:-}" ]; then
+    cp "$Q7_STOCK_DEVA" "$OUT/SD-CARD/mod/clean/deva-ctrl-qc.so.stock"
+fi
 
 # Extras: single M.I.B. mods (the setup covers install + menu)
 for m in uninstall logging altscreen_on altscreen_off rgd_enable rgd_disable \
