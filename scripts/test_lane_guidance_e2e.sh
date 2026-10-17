@@ -5,13 +5,13 @@
 # tests/LaneGuidanceE2ETest.java replays its bus frames and checks every junction.
 #   HOOK_SRC=<dir with routeguidance/ and framework/>  test another hook tree
 #   SKIP_JAVA_BUILD=1                                   reuse build/carplay_hook.jar
-#   KEEP_DIR=<dir>                                      keep the bus frames there
+#   KEEP_DIR=<dir>                                      keep the bus frames in <dir>/lane_e2e
 set -euo pipefail
 PROJECT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 . "$PROJECT_DIR/scripts/stock_env.sh"
 HOOK=${HOOK_SRC:-$PROJECT_DIR/hook}
 PATCH_JAR="$PROJECT_DIR/build/carplay_hook.jar"
-if [ -n "${KEEP_DIR:-}" ]; then OUT=$KEEP_DIR; rm -rf "$OUT"; mkdir -p "$OUT"
+if [ -n "${KEEP_DIR:-}" ]; then OUT=$KEEP_DIR/lane_e2e; rm -rf "$OUT"; mkdir -p "$OUT"
 else OUT=$(mktemp -d); trap 'rm -rf "$OUT"' EXIT; fi
 mkdir "$OUT/frames" "$OUT/classes"
 
