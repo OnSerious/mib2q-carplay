@@ -20,8 +20,10 @@ VERBOSE_MARKERS=${VERBOSE_MARKERS:-/mnt/app/carplay_verbose /tmp/carplay_verbose
 # Power-on navigation boost: navigation's start-up threads (priority 10) wait on the eMMC driver
 # and io-pkt behind the projection session's priority-10 work; NavSDK start took 54-56 s instead
 # of 2.8 s.  nav_boost moves its priority-10 threads to 12 (servers inherit the client's
-# priority) until navigation is up, then back to 10.  Off: /mnt/app/root/carplay_nav_boost.off.
+# priority) until navigation is up, then puts back exactly the threads it raised (recorded in
+# NAV_BOOST_STATE).  Off: /mnt/app/root/carplay_nav_boost.off.
 NAV_BOOST_MARK=${NAV_BOOST_MARK:-/tmp/carplay_nav_boost.started}
+NAV_BOOST_STATE=${NAV_BOOST_STATE:-/tmp/carplay_nav_boost.state}
 NAV_BOOST_OFF=${NAV_BOOST_OFF:-/mnt/app/root/carplay_nav_boost.off}
 NAV_BOOST_FROM=${NAV_BOOST_FROM:-10}
 NAV_BOOST_TO=${NAV_BOOST_TO:-12}
@@ -187,7 +189,7 @@ monitor_boot_snapshot()
 
 # Once per boot, only when the first session starts before navigation is up (the power-on
 # case): a detached job re-applies the boost every 2 s, so a relaunched navigation is caught too,
-# until NavReadyMarker or NAV_BOOST_MAX_S, then restores the priority.  Never tied to this
+# until NavReadyMarker or NAV_BOOST_MAX_S, then restores the threads it raised.  Never tied to this
 # generation; logs only with verbose.
 monitor_nav_boost()
 {
@@ -199,8 +201,9 @@ monitor_nav_boost()
         echo "[monitor] navigation not up at first session start: priority $NAV_BOOST_FROM -> $NAV_BOOST_TO until it is up (max ${NAV_BOOST_MAX_S}s)" >> "$WLOG"
     (
         MON_BOOST_T=0
+        rm -f "$NAV_BOOST_STATE"
         while [ ! -e "$NAV_READY" ] && [ "$MON_BOOST_T" -lt "$NAV_BOOST_MAX_S" ]; do
-            MON_BOOST_OUT=`"$H/nav_boost" "$NAV_BOOST_FROM" "$NAV_BOOST_TO" $NAV_BOOST_NAMES 2>&1`
+            MON_BOOST_OUT=`"$H/nav_boost" "$NAV_BOOST_FROM" "$NAV_BOOST_TO" "$NAV_BOOST_STATE" $NAV_BOOST_NAMES 2>&1`
             case "$MON_BOOST_OUT" in
                 '0 '*) ;;
                 *) monitor_verbose &&
@@ -209,7 +212,7 @@ monitor_nav_boost()
             sleep 2
             MON_BOOST_T=`expr "$MON_BOOST_T" + 2`
         done
-        MON_BOOST_OUT=`"$H/nav_boost" "$NAV_BOOST_TO" "$NAV_BOOST_FROM" $NAV_BOOST_NAMES 2>&1`
+        MON_BOOST_OUT=`"$H/nav_boost" -r "$NAV_BOOST_STATE" 2>&1`
         monitor_verbose &&
             echo "[monitor] nav boost ended after ${MON_BOOST_T}s (nav_ready=`[ -e "$NAV_READY" ] && echo yes || echo no`): restored $MON_BOOST_OUT" >> "$WLOG"
     ) </dev/null >/dev/null 2>&1 &

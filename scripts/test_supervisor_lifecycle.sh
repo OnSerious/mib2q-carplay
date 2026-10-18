@@ -178,6 +178,7 @@ unset -f pidin sloginfo
 # Power-on navigation boost: once per boot, only while navigation is not up, re-applied until it
 # is up, then restored; off marker and a missing helper mean nothing; trace only with verbose.
 NAV_BOOST_MARK=$TEST_DIR/nav_boost.started
+NAV_BOOST_STATE=$TEST_DIR/nav_boost.state
 NAV_BOOST_OFF=$TEST_DIR/nav_boost.off
 NAV_BOOST_MAX_S=8
 NAV_BOOST_FROM=10
@@ -194,14 +195,14 @@ sleep() { n=`cat "$TEST_DIR/boost_calls" 2>/dev/null | wc -l`; [ "$SCENARIO" = u
 
 SCENARIO=up; boost_reset; boost_helper; rm -f $VERBOSE_MARKERS
 monitor_nav_boost; wait
-[ "$(sed -n 1p "$TEST_DIR/boost_calls")" = '10 12 AppStartATF navStartup' ] || boost_fail "boost call: $(cat "$TEST_DIR/boost_calls")"
-[ "$(tail -1 "$TEST_DIR/boost_calls")" = '12 10 AppStartATF navStartup' ] || boost_fail 'not restored'
+[ "$(sed -n 1p "$TEST_DIR/boost_calls")" = "10 12 $NAV_BOOST_STATE AppStartATF navStartup" ] || boost_fail "boost call: $(cat "$TEST_DIR/boost_calls")"
+[ "$(tail -1 "$TEST_DIR/boost_calls")" = "-r $NAV_BOOST_STATE" ] || boost_fail 'not restored'
 [ "$(grep -c '^10 12' "$TEST_DIR/boost_calls")" = 2 ] || boost_fail "not re-applied until up: $(cat "$TEST_DIR/boost_calls")"
 [ ! -s "$WLOG" ] || boost_fail 'logged without verbose'
 
 SCENARIO=never; boost_reset; boost_helper; : > "$TEST_DIR/verbose_persist"
 monitor_nav_boost; wait
-[ "$(grep -c '^10 12' "$TEST_DIR/boost_calls")" = 4 ] && [ "$(tail -1 "$TEST_DIR/boost_calls")" = '12 10 AppStartATF navStartup' ] \
+[ "$(grep -c '^10 12' "$TEST_DIR/boost_calls")" = 4 ] && [ "$(tail -1 "$TEST_DIR/boost_calls")" = "-r $NAV_BOOST_STATE" ] \
     || boost_fail "cap: $(cat "$TEST_DIR/boost_calls")"
 grep -q 'priority 10 -> 12' "$WLOG" && grep -q 'nav boost ended after 8s (nav_ready=no): restored 7 1' "$WLOG" || boost_fail 'verbose trace'
 : > "$TEST_DIR/boost_calls.before"; cp "$TEST_DIR/boost_calls" "$TEST_DIR/boost_calls.before"

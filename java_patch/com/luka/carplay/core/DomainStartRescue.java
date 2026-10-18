@@ -12,7 +12,7 @@
  * This watcher changes no stock class.  For the domains in WATCHED it reads the stock domain
  * history (under the stock DOMAIN_SYNCER lock) and, when a request is still unanswered although
  * the domain has reported a newer state since, re-sends the same DSIStartup.startDomain the
- * stock code would send after its timeout.  At most MAX_RESENDS per request, only in the first
+ * stock code would send after its timeout (re-checked and sent under that lock, like stock).  At most MAX_RESENDS per request, only in the first
  * WINDOW_MS (60 s) after HMI start.  Any mismatch in the stock layout disables it (stock behaviour).
  *
  * Off switch, no rebuild: a file named carplay_domain_rescue.off on the SD card root (checked
@@ -114,45 +114,68 @@ public final class DomainStartRescue implements Runnable {
     void poll(long now) throws Exception {
         Object syncer = fSyncer.get(handler);
         Object[] domains = (Object[]) fDomains.get(handler);
+        long[] req = new long[4];       /* reqTs, reqState, updTs, updated */
         for (int i = 0; i < ids.length; i++) {
             Object d = domains[ids[i]];
             if (d == null) continue;
-            int updated;
-            Object[] history;
             synchronized (syncer) {                     /* the lock stock mutates the history under */
-                updated = fUpdated.getInt(d);
-                history = ((List) fHistory.get(d)).toArray();
+                lastRequest(d, req);
             }
-            long reqTs = -1L, updTs = -1L;
-            int reqState = 0;
-            for (int h = 0; h < history.length; h++) {
-                int action = fAction.getInt(history[h]);
-                if (action == ACTION_REQUESTED) {
-                    reqTs = fTs.getLong(history[h]);
-                    reqState = fStatus.getInt(history[h]);
-                    updTs = -1L;
-                } else if (action == ACTION_UPDATED && reqTs >= 0L) {
-                    updTs = fTs.getLong(history[h]);
-                }
-            }
-            if (reqTs != trackedReq[i]) {
-                trackedReq[i] = reqTs;
+            if (req[0] != trackedReq[i]) {
+                trackedReq[i] = req[0];
                 resends[i] = 0;
             }
-            if (!shouldResend(now, reqTs, reqState, updTs, updated, resends[i], lastResend[i])) continue;
-            if (offMarkerPresent(offMarkers)) {
+            if (!shouldResend(now, req, resends[i], lastResend[i])) continue;
+            if (offMarkerPresent(offMarkers)) {         /* file I/O: outside the stock lock */
                 Log.w(TAG, "carplay_domain_rescue.off present; not re-sending");
                 continue;
             }
-            Object dsi = fDsi.get(handler);
-            if (dsi == null) continue;
+            long reqTs = req[0];
+            boolean sent = false;
+            /* Re-check and send under the stock lock, as stock doStartDomain does (startPrepare +
+             * DSIStartup.startDomain under DOMAIN_SYNCER): an answer or a newer stock request that
+             * arrived since the snapshot above is seen here, never overtaken by a stale re-send. */
+            synchronized (syncer) {
+                lastRequest(d, req);
+                Object dsi = fDsi.get(handler);
+                if (dsi != null && req[0] == reqTs && shouldResend(now, req, resends[i], lastResend[i])) {
+                    mStartDomain.invoke(dsi, new Object[] { new Integer(ids[i]), new Integer((int) req[1]) });
+                    sent = true;
+                }
+            }
+            if (!sent) continue;
             resends[i]++;
             lastResend[i] = now;
-            Log.w(TAG, WATCHED[i] + " startDomain(0x" + Integer.toHexString(reqState)
-                + ") unanswered " + (now - reqTs) + " ms, state 0x" + Integer.toHexString(updated)
-                + " since " + (now - updTs) + " ms: re-sending #" + resends[i]);
-            mStartDomain.invoke(dsi, new Object[] { new Integer(ids[i]), new Integer(reqState) });
+            Log.w(TAG, WATCHED[i] + " startDomain(0x" + Integer.toHexString((int) req[1])
+                + ") unanswered " + (now - req[0]) + " ms, state 0x" + Integer.toHexString((int) req[3])
+                + " since " + (now - req[2]) + " ms: re-sent #" + resends[i]);
         }
+    }
+
+    /** The domain's last request and what followed it, into out; caller holds DOMAIN_SYNCER. */
+    private void lastRequest(Object d, long[] out) throws Exception {
+        List history = (List) fHistory.get(d);
+        long reqTs = -1L, updTs = -1L;
+        int reqState = 0;
+        for (int h = 0, n = history.size(); h < n; h++) {
+            Object e = history.get(h);
+            int action = fAction.getInt(e);
+            if (action == ACTION_REQUESTED) {
+                reqTs = fTs.getLong(e);
+                reqState = fStatus.getInt(e);
+                updTs = -1L;
+            } else if (action == ACTION_UPDATED && reqTs >= 0L) {
+                updTs = fTs.getLong(e);
+            }
+        }
+        out[0] = reqTs;
+        out[1] = reqState;
+        out[2] = updTs;
+        out[3] = fUpdated.getInt(d);
+    }
+
+    private static boolean shouldResend(long now, long[] req, int resends, long lastResend) {
+        return shouldResend(now, req[0], (int) req[1], req[2], (int) req[3], resends, lastResend);
     }
 
     /**

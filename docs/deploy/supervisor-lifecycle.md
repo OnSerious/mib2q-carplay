@@ -86,10 +86,12 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
   wrapper log shows `holding renderers until native navigation is up` and how long it took.
   The same first start, when navigation is not up yet, also starts two once-per-boot jobs (each
   guarded by a noclobber file in `/tmp`, which is `/dev/shmem` on the unit and has no `mkdir`):
-  - **navigation boost** (`/tmp/carplay_nav_boost.started`): every 2 s `nav_boost 10 12 AppStartATF
-    navStartup PNavApp DRController IconProviderApp` moves navigation's priority-10 threads to 12, so
-    a relaunched navigation is caught too, until `/tmp/carplay_nav_ready` or 300 s; then `nav_boost
-    12 10 ...` puts them back. Navigation's start-up threads wait on the eMMC driver and io-pkt
+  - **navigation boost** (`/tmp/carplay_nav_boost.started`): every 2 s `nav_boost 10 12 /tmp/carplay_nav_boost.state
+    AppStartATF navStartup PNavApp DRController IconProviderApp` moves navigation's threads whose
+    base priority is 10 to 12 and records each one (pid, tid, thread start time), so a relaunched
+    navigation is caught too, until `/tmp/carplay_nav_ready` or 300 s; then `nav_boost -r` puts back
+    only the recorded threads that still exist and are still at 12 (a thread that was at 12 before
+    keeps it). Navigation's start-up threads wait on the eMMC driver and io-pkt
     (`EBNavFreezeLog`: `BusinessLogic@NavLibAdapter` in REPLY to `devb-sdmmc`), which serve each
     request at the caller's priority, behind every other priority-10 client of the projection
     session (NavSDK start 54-56 s instead of 2.8 s, `carplay_logs_fixed`/`_last`). Off:
