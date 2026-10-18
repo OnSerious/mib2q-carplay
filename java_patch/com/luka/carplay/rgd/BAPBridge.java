@@ -529,13 +529,21 @@ public class BAPBridge {
      * Get ClusterService via Navigation singleton and install native BAP gate.
      * Non-fatal - if this fails, native RG stream won't be blocked.
      */
+    private boolean clusterAccessNullLogged;
+
     private void initClusterAccess() {
         try {
             Navigation navi = Navigation.getInstance();
             if (navi == null) {
-                Log.w(TAG, "ClusterAccess: Navigation.getInstance() returned null");
+                /* Retried every 200 ms, then every 2 s, while navigation starts (minutes after
+                 * power-on with a dongle): one line, not one per attempt. */
+                if (!clusterAccessNullLogged) {
+                    clusterAccessNullLogged = true;
+                    Log.w(TAG, "ClusterAccess: Navigation.getInstance() returned null; retrying quietly");
+                }
                 return;
             }
+            clusterAccessNullLogged = false;
             ClusterService cs = navi.getClusterService();
             if (cs == null) {
                 Log.w(TAG, "ClusterAccess: ClusterService is null");

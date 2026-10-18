@@ -152,6 +152,21 @@ case $ACT in
             echo "DONE. CarPlay hardware decoder waits 2 minutes after an MMI start (software until then)."
         fi
         ;;
+    verbose)
+        # Full diagnostics that survive a reboot: hook/Java/renderer INFO logs, the boot slog
+        # snapshots and the power-on navigation boost trace. Default OFF so the boot stays light.
+        # "Save logs" also turns verbose on, but only until the next reboot (/tmp).
+        M=/mnt/app/carplay_verbose
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "DONE. Verbose logging OFF from the next boot (WARN only)."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "DONE. Verbose logging ON, also after a reboot. Press again to turn it off."
+        fi
+        ;;
     siri_short)
         # Opt-in: with CarPlay connected, a short press of the steering-wheel voice key opens
         # Siri instead of the car's own voice control (the long press always opens Siri).
@@ -214,7 +229,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|verbose|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac

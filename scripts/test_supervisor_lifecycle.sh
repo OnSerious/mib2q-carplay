@@ -145,6 +145,77 @@ monitor_nav_gate || gate_fail released
 [ "$(cat "$NAV_GATE")" = done ] && [ ! -s "$WLOG" ] || gate_fail 'adopted renderer held'
 RENDERER_LIVE=0
 
+# Boot slog snapshots: once per boot, only while navigation is not up, never tied to the generation.
+BOOT_SNAP_MARK=$TEST_DIR/boot_snap.started
+BOOT_SNAP_PREFIX=$TEST_DIR/boot_slog_
+BOOT_SNAP_AT='60 240'
+snap_fail() { echo "FAIL: boot snapshot: $1" >&2; exit 1; }
+sleep() { echo "$1" >> "$TEST_DIR/snap_sleeps"; }
+pidin() { echo '123 /navigation/navStartup -sm-restart 1'; echo '9 /bin/other'; }
+sloginfo() { echo 'Jan 01 00:00:32 startDomain( Nav, 0x700 )'; }
+VERBOSE_MARKERS="$TEST_DIR/verbose_persist $TEST_DIR/verbose_tmp"
+rm -f "$NAV_READY" "$TEST_DIR/snap_sleeps" $VERBOSE_MARKERS; : > "$WLOG"
+monitor_boot_snapshot; wait                       # verbose off: nothing at all
+[ ! -e "$BOOT_SNAP_MARK" ] && [ ! -s "$WLOG" ] && [ ! -e "$TEST_DIR/snap_sleeps" ] || snap_fail 'taken without verbose'
+: > "$TEST_DIR/verbose_persist"
+: > "$NAV_READY"
+monitor_boot_snapshot; wait
+[ ! -e "$BOOT_SNAP_MARK" ] && [ ! -s "$WLOG" ] || snap_fail 'taken although navigation was up'
+rm -f "$NAV_READY"
+monitor_boot_snapshot; wait
+for s in 60 240; do
+    f=${BOOT_SNAP_PREFIX}${s}s.txt
+    [ -f "$f" ] && grep -q "== $s s after" "$f" && grep -q navStartup "$f" && ! grep -q /bin/other "$f" \
+        && grep -q 'startDomain( Nav' "$f" || snap_fail "snapshot at ${s}s"
+done
+[ "$(tr '\n' ' ' < "$TEST_DIR/snap_sleeps")" = '60 180 ' ] || snap_fail "sleeps: $(cat "$TEST_DIR/snap_sleeps")"
+grep -q 'boot slog snapshots in 60 240s' "$WLOG" || snap_fail 'not logged'
+rm -f "${BOOT_SNAP_PREFIX}"*; : > "$WLOG"
+monitor_boot_snapshot; wait                       # later generation this boot: nothing
+[ ! -e "${BOOT_SNAP_PREFIX}60s.txt" ] && [ ! -s "$WLOG" ] || snap_fail 'taken twice'
+unset -f pidin sloginfo
+
+# Power-on navigation boost: once per boot, only while navigation is not up, re-applied until it
+# is up, then restored; off marker and a missing helper mean nothing; trace only with verbose.
+NAV_BOOST_MARK=$TEST_DIR/nav_boost.started
+NAV_BOOST_OFF=$TEST_DIR/nav_boost.off
+NAV_BOOST_MAX_S=8
+NAV_BOOST_FROM=10
+NAV_BOOST_TO=12
+NAV_BOOST_NAMES='AppStartATF navStartup'
+boost_fail() { echo "FAIL: nav boost: $1" >&2; exit 1; }
+boost_reset() { rm -f "$NAV_BOOST_MARK" "$NAV_BOOST_OFF" "$NAV_READY" "$TEST_DIR/boost_calls" "$H/nav_boost"; : > "$WLOG"; }
+boost_helper() {
+    printf '#!/bin/sh\necho "$*" >> "%s"\ncase $1 in 10) echo 7 1 ;; *) echo 7 1 ;; esac\n' \
+        "$TEST_DIR/boost_calls" > "$H/nav_boost"
+    chmod +x "$H/nav_boost"
+}
+sleep() { n=`cat "$TEST_DIR/boost_calls" 2>/dev/null | wc -l`; [ "$SCENARIO" = up ] && [ "$n" -ge 2 ] && : > "$NAV_READY"; :; }
+
+SCENARIO=up; boost_reset; boost_helper; rm -f $VERBOSE_MARKERS
+monitor_nav_boost; wait
+[ "$(sed -n 1p "$TEST_DIR/boost_calls")" = '10 12 AppStartATF navStartup' ] || boost_fail "boost call: $(cat "$TEST_DIR/boost_calls")"
+[ "$(tail -1 "$TEST_DIR/boost_calls")" = '12 10 AppStartATF navStartup' ] || boost_fail 'not restored'
+[ "$(grep -c '^10 12' "$TEST_DIR/boost_calls")" = 2 ] || boost_fail "not re-applied until up: $(cat "$TEST_DIR/boost_calls")"
+[ ! -s "$WLOG" ] || boost_fail 'logged without verbose'
+
+SCENARIO=never; boost_reset; boost_helper; : > "$TEST_DIR/verbose_persist"
+monitor_nav_boost; wait
+[ "$(grep -c '^10 12' "$TEST_DIR/boost_calls")" = 4 ] && [ "$(tail -1 "$TEST_DIR/boost_calls")" = '12 10 AppStartATF navStartup' ] \
+    || boost_fail "cap: $(cat "$TEST_DIR/boost_calls")"
+grep -q 'priority 10 -> 12' "$WLOG" && grep -q 'nav boost ended after 8s (nav_ready=no): restored 7 1' "$WLOG" || boost_fail 'verbose trace'
+: > "$TEST_DIR/boost_calls.before"; cp "$TEST_DIR/boost_calls" "$TEST_DIR/boost_calls.before"
+monitor_nav_boost; wait                           # later generation this boot
+cmp -s "$TEST_DIR/boost_calls" "$TEST_DIR/boost_calls.before" || boost_fail 'ran twice'
+
+for case in ready off missing; do
+    boost_reset; boost_helper
+    case $case in ready) : > "$NAV_READY" ;; off) : > "$NAV_BOOST_OFF" ;; missing) rm -f "$H/nav_boost" ;; esac
+    monitor_nav_boost; wait
+    [ ! -e "$TEST_DIR/boost_calls" ] && [ ! -e "$NAV_BOOST_MARK" ] || boost_fail "ran with $case"
+done
+rm -f "$H/nav_boost" $VERBOSE_MARKERS
+
 # Runtime supervisor code must remain out of USB/OTG and dio ownership.
 if grep -E 'media-con-ctrl|reset port|start_stack|kill .*DIO_PID' \
     "$ROOT/deploy/smartphone_integrator/carplay_startup.sh" \

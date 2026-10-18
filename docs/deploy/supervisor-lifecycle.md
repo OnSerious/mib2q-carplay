@@ -75,13 +75,31 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
 - The monitor adopts or starts `maneuver_render` **immediately** (the renderer never gates dio, and
   it must be ready before Java selects the cluster context), except for the **first start after
   power-on**: then it waits for `/tmp/carplay_nav_ready`, which Java's `NavReadyMarker` writes once
-  the `Navigation` singleton exists, at most 90 s in total (`NAV_WAIT_MAX_S`; the seconds waited are
+  the `Navigation` singleton exists, at most 300 s in total (`NAV_WAIT_MAX_S`; with a dongle at
+  power-on navigation took 2-4 min, and renderers started at the old 90 s only added load to that
+  window; the seconds waited are
   kept in `/tmp/carplay_renderer_gate`, so a replaced generation resumes the wait). With a phone
   connected at power-on, native navigation missed the service manager's ~60 s start deadline and
   was relaunched (carplay_logs 024, 027: `navStartup -sm-restart 1` at ~93 s) or never came back
   (022); the renderers are useless before navigation exists anyway (route guidance waits for it),
   so they are kept out of that window. A running renderer or a later connect never waits. The
   wrapper log shows `holding renderers until native navigation is up` and how long it took.
+  The same first start, when navigation is not up yet, also starts two once-per-boot jobs (each
+  guarded by a noclobber file in `/tmp`, which is `/dev/shmem` on the unit and has no `mkdir`):
+  - **navigation boost** (`/tmp/carplay_nav_boost.started`): every 2 s `nav_boost 10 12 AppStartATF
+    navStartup PNavApp DRController IconProviderApp` moves navigation's priority-10 threads to 12, so
+    a relaunched navigation is caught too, until `/tmp/carplay_nav_ready` or 300 s; then `nav_boost
+    12 10 ...` puts them back. Navigation's start-up threads wait on the eMMC driver and io-pkt
+    (`EBNavFreezeLog`: `BusinessLogic@NavLibAdapter` in REPLY to `devb-sdmmc`), which serve each
+    request at the caller's priority, behind every other priority-10 client of the projection
+    session (NavSDK start 54-56 s instead of 2.8 s, `carplay_logs_fixed`/`_last`). Off:
+    `/mnt/app/root/carplay_nav_boost.off`; missing helper = no boost.
+  - **boot slog snapshots**, verbose only (`/mnt/app/carplay_verbose`, GEM *Verbose logging ON /
+    OFF*): 60 s and 240 s later `sloginfo` plus the navigation processes from `pidin ar` go to
+    `/tmp/carplay_boot_slog_60s.txt` / `_240s.txt`. The slog ring holds only ~2 min, so a later
+    *Save logs* has lost the start-up sequence (`carplay_logs_hang`); the logging mod copies these
+    files like every other `/tmp/carplay_*`.
+  Both log to the wrapper log only with verbose on.
   Then every 2 s it
   restarts a missing renderer after a 5 s backoff, re-checking ownership before it spawns, and caps
   `/tmp/maneuver_render.log` and `/tmp/carplay_wrapper.log` at 512 KiB about every 5 min.
