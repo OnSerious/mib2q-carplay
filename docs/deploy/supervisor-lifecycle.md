@@ -88,10 +88,12 @@ overwritten (the custom cleanup calls it for Audi's mdnsd/PPS teardown).
   guarded by a noclobber file in `/tmp`, which is `/dev/shmem` on the unit and has no `mkdir`):
   - **navigation boost** (`/tmp/carplay_nav_boost.started`): every 2 s `nav_boost 10 12 /tmp/carplay_nav_boost.state
     AppStartATF navStartup PNavApp DRController IconProviderApp` moves navigation's threads whose
-    base priority is 10 to 12 and records each one (pid, tid, thread start time), so a relaunched
-    navigation is caught too, until `/tmp/carplay_nav_ready` or 300 s; then `nav_boost -r` puts back
-    only the recorded threads that still exist and are still at 12 (a thread that was at 12 before
-    keeps it). Navigation's start-up threads wait on the eMMC driver and io-pkt
+    base priority is 10 to 12, so a relaunched navigation is caught too, until
+    `/tmp/carplay_nav_ready` or 300 s. Before it changes a process the first time it records the
+    process (pid, start time) and its threads already at 12; `nav_boost -r` then lowers every other
+    thread at 12 in those processes back to 10, including threads and child processes that inherited
+    12 from a boosted thread, and leaves the ones that were at 12 before. If the record cannot be
+    written nothing is raised (`tests/nav_boost_test.c`). Navigation's start-up threads wait on the eMMC driver and io-pkt
     (`EBNavFreezeLog`: `BusinessLogic@NavLibAdapter` in REPLY to `devb-sdmmc`), which serve each
     request at the caller's priority, behind every other priority-10 client of the projection
     session (NavSDK start 54-56 s instead of 2.8 s, `carplay_logs_fixed`/`_last`). Off:
