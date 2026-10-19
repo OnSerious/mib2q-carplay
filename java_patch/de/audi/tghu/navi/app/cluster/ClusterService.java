@@ -1127,10 +1127,4 @@ public class ClusterService implements NaviMoKoKDKConstants, PowerEventListener 
         this.combiBAPListener.combiservice = svc;
     }
 
-    /** Restore the authoritative stock INITIALIZING/NORMAL decision after CarPlay releases the
-     * cluster.  A deferred-call replay alone is insufficient when no map-ready edge occurred while
-     * the takeover was active. */
-    public synchronized void refreshInitializingScreenAfterCarPlay() {
-        this.combiBAPListener.forceShowInitScreen(this.initScreenNeededOnKombi());
-    }
 }

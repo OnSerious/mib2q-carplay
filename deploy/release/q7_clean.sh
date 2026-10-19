@@ -34,7 +34,7 @@ GEM=/mnt/app/eso/hmi/engdefs
 OWNED="$HOOKS/libcarplay_hook.so $HOOKS/maneuver_render $HOOKS/flag_atlas.rgba
 $HOOKS/carplay_startup.sh $HOOKS/carplay_monitor.sh $HOOKS/carplay_processes.sh
 $HOOKS/carplay_cleanup.sh $HOOKS/libaltscreen111_mhi2q.so $HOOKS/altscreen_render
-$HOOKS/libaa_cluster_hook.so $HOOKS/aa_startup.sh $HOOKS/libcarplay_apac.so
+$HOOKS/libaa_cluster_hook.so $HOOKS/aa_startup.sh $HOOKS/nav_boost $HOOKS/libcarplay_apac.so
 $HOOKS/scene_masknet_c.bin $HOOKS/carplay_audio51.state $HOOKS/carplay_upmix_texts.ok
 $JARS/carplay_hook.jar"
 

@@ -66,9 +66,6 @@ bool veh_location_wants_speed(const uint8_t* payload, size_t len);
 /* Identify additions: VehicleInformationComponent (when add_info) + VehicleStatusComponent. */
 size_t veh_build_identify_components(uint8_t* out, size_t out_max, bool add_info, uint8_t engine);
 
-/* IdentificationRejected 0x1D03 names one of our components or messages. */
-bool veh_rejection_is_ours(const uint8_t* payload, size_t len);
-
 typedef struct {
     uint64_t t_ms;              /* monotonic */
     uint32_t speed_mms;         /* mm/s */

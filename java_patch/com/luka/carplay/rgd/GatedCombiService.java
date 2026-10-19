@@ -7,10 +7,8 @@
  * This keeps BAPBridge as the single source for FctIDs
  * 17/18/19/20/21/22/23/24/39/46/49/55.
  *
- * Non-route-guidance methods always delegate, except the NAVSD initializing state
- * while the CarPlay / Android Auto video owns the cluster (plane 99).
+ * Non-route-guidance methods always delegate.
  *
- * Init-state takeover ported from luka-dev/mib2q-carplay-rgi.
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
 package com.luka.carplay.rgd;
@@ -28,13 +26,6 @@ import de.audi.atip.interapp.combi.bap.navi.data.EtcStatus;
 public class GatedCombiService implements CombiBAPServiceNavi {
     final CombiBAPServiceNavi real;
     volatile boolean blockRouteGuidance;
-    /* FSG_OperationState is global NAVSD state.  Stock Navigation drives it through
-     * show/hideInitializingScreen while its own map starts.  That INITIALIZING state
-     * also covers the independent phone video on displayable 99, so defer the stock
-     * request for the complete altScreen ownership interval. */
-    private boolean blockInitializingState;
-    private boolean deferredInitializing;
-    private boolean haveDeferredInitializing;
     /* FctIDs 19/20/21/22/46 have different ownership from the rest of route guidance:
      * outside CarPlay RGI the stock navigator may keep driving the current/next-road
      * text, the lower bar,
@@ -49,32 +40,6 @@ public class GatedCombiService implements CombiBAPServiceNavi {
      * map, so its native scale/altitude readouts in the lower bar stay visible. */
     public void setRouteGuidanceBlocked(boolean active) {
         blockRouteGuidance = active;
-    }
-
-    /** Keep NAVSD operational while plane 99 owns the cluster.  The latest stock
-     * request is remembered and replayed on release; ClusterService additionally
-     * recomputes the authoritative state in case no edge occurred during takeover. */
-    public synchronized void setAltScreenTakeover(boolean active) {
-        if (blockInitializingState == active) return;
-
-        if (active) {
-            haveDeferredInitializing = false;
-            deferredInitializing = false;
-            blockInitializingState = true;
-            /* Clear an INITIALIZING value that may have been published before the
-             * wrapper was installed.  This is independent of stock map readiness. */
-            try { real.hideInitializingScreen(); } catch (Throwable t) { }
-            return;
-        }
-
-        blockInitializingState = false;
-        if (haveDeferredInitializing) {
-            try {
-                if (deferredInitializing) real.showInitializingScreen();
-                else real.hideInitializingScreen();
-            } catch (Throwable t) { }
-        }
-        haveDeferredInitializing = false;
     }
 
     public void setCurrentPositionInfoBlocked(boolean blocked) {
@@ -114,27 +79,9 @@ public class GatedCombiService implements CombiBAPServiceNavi {
         if (!blockRouteGuidance) real.updateManeuverState(a);
     }
 
-    /* All other methods: pure delegation, except the stock NAVSD initialization
-     * state which must not mask an active altScreen plane. */
-    public synchronized void showInitializingScreen() {
-        if (blockInitializingState) {
-            deferredInitializing = true;
-            haveDeferredInitializing = true;
-            return;
-        }
-        real.showInitializingScreen();
-    }
-    public synchronized void hideInitializingScreen() {
-        if (blockInitializingState) {
-            deferredInitializing = false;
-            haveDeferredInitializing = true;
-            /* Reassert READY in case this callback crossed the takeover edge in
-             * the underlying BAP initialization manager. */
-            real.hideInitializingScreen();
-            return;
-        }
-        real.hideInitializingScreen();
-    }
+    /* All other methods: pure delegation. */
+    public void showInitializingScreen() { real.showInitializingScreen(); }
+    public void hideInitializingScreen() { real.hideInitializingScreen(); }
     public void updateCompassInfo(int a, int b) { real.updateCompassInfo(a, b); }
     public void updateTurnToInfo(String a, String b) {
         if (!blockCurrentPositionInfo) real.updateTurnToInfo(a, b); }

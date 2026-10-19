@@ -143,9 +143,6 @@ public final class ScreenModule implements Module {
         if (altScreenActive == active) return;
         altScreenActive = active;
         Log.i(TAG, "altScreen video " + (active ? "live -> ctx 81/82" : "stopped -> ctx 74/80"));
-        /* Stock NAVSD INITIALIZING must not cover the phone video on plane 99; with the
-         * stock map chosen (long press) the stock map is the visible layer again. */
-        ScreenNavStatusGate.setAltScreenActive(active && !userStockMap);
         republish();
     }
 
@@ -169,8 +166,6 @@ public final class ScreenModule implements Module {
             stock = userStockMap;
         }
         Log.i(TAG, "MFW long press: cluster -> " + (stock ? "stock map" : "phone map"));
-        /* Stock NAVSD INITIALIZING is only suppressed while the phone video is the visible layer. */
-        ScreenNavStatusGate.setAltScreenActive(!stock);
         republish();
         com.luka.carplay.cluster.ClusterLayerController.reapply();
     }
@@ -338,7 +333,6 @@ public final class ScreenModule implements Module {
             desiredCtx = CTX_STOCK_CLUSTER;
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
-        ScreenNavStatusGate.setAltScreenActive(false);
         CarplayBus.getInstance().on(CarplayBus.EVT_HELLO, HELLO_LISTENER);
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
@@ -370,7 +364,6 @@ public final class ScreenModule implements Module {
             userStockMap = false;
         }
         CarplayBus.getInstance().off(CarplayBus.EVT_HELLO);
-        ScreenNavStatusGate.setAltScreenActive(false);
         republish();
     }
 

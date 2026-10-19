@@ -34,21 +34,16 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     com.luka.carplay.telephony.GatedPhoneDialTest
 
+# Power-on: a startDomain the target app dropped is re-sent, against the real stock DomainHandler.
+"$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    -d "$TEST_DIR" "$PROJECT_DIR/tests/DomainStartRescueTest.java"
+"$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
+    com.luka.carplay.core.DomainStartRescueTest
+
 # Siri on a short voice-key press is opt-in (marker); default = stock car voice control.
 "$TEST_JDK/bin/javac" -encoding UTF-8 -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
     -d "$TEST_DIR" "$PROJECT_DIR/tests/SiriShortPressTest.java"
 "$TEST_JDK/bin/java" -cp "$TEST_DIR:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" SiriShortPressTest
-
-# NAVSD INITIALIZING/READY passes through the RGI gate, and is deferred while the
-# phone video owns plane 99 (cold-boot INITIALIZING takeover).
-mkdir -p "$TEST_DIR/nav-init"
-"$TEST_JDK/bin/javac" -encoding UTF-8 \
-    -cp "$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
-    -d "$TEST_DIR/nav-init" \
-    "$PROJECT_DIR/tests/GatedCombiServiceInitStateTest.java"
-"$TEST_JDK/bin/java" \
-    -cp "$TEST_DIR/nav-init:$PROJECT_DIR/build/carplay_hook.jar:$STOCK_JAR" \
-    com.luka.carplay.rgd.GatedCombiServiceInitStateTest
 
 # Android Auto adapter: event sequence -> RouteGuidance text frames, lanes, views, VC gate.
 mkdir -p "$TEST_DIR/aa"

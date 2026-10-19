@@ -45,6 +45,7 @@ flat_dest() {
         carplay_hook.jar) echo "$JARS/$1" ;;
         libaltscreen111_mhi2q.so|altscreen_render) echo "$HOOKS/$1" ;;  # optional AltScreen
         libaa_cluster_hook.so|aa_startup.sh) echo "$HOOKS/$1" ;;          # optional Android Auto
+        nav_boost) echo "$HOOKS/$1" ;;                                   # optional power-on navigation boost
         *) return 1 ;;
     esac
 }
@@ -52,7 +53,7 @@ flat_dest() {
 # unaffected. AltScreen (cluster VIDEO renderer + CarPlay hook, see
 # docs/deploy/altscreen-mhi2q.md) and Android Auto (gal launcher + cluster hook,
 # see docs/android-auto/overview.md).
-OPTIONAL_ASSETS="libaltscreen111_mhi2q.so altscreen_render libaa_cluster_hook.so aa_startup.sh"
+OPTIONAL_ASSETS="libaltscreen111_mhi2q.so altscreen_render libaa_cluster_hook.so aa_startup.sh nav_boost"
 
 CFG=/mnt/system/etc/eso/production/smartphone_integrator.json
 DIO=/mnt/system/etc/eso/production/dio_manager.json
@@ -62,6 +63,7 @@ mode_for() {
         *.so|*.so.*)        echo 755 ;;
         */maneuver_render)  echo 755 ;;
         */altscreen_render) echo 755 ;;
+        */nav_boost)        echo 755 ;;
         *.sh)               echo 755 ;;
         *)                  echo 644 ;;  # atlas, .jar
     esac

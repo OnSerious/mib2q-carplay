@@ -197,9 +197,12 @@ Renderer (`altscreen_render`):
 The renderer runs at QNX priority 15 (like `maneuver_render`): at the default 10 the compositor's
 workers can stall every renderer thread for 300-650 ms at once (measured upstream, 2026-10-09).
 
-Stock NAVSD *INITIALIZING* (stock navigation still loading its map) would also cover plane 99, so
-`GatedCombiService.setAltScreenTakeover` defers it while the phone video is live and replays the
-latest stock state when the video stops (`ScreenNavStatusGate.setAltScreenActive`).
+Stock NAVSD *INITIALIZING* ("Initialising navigation system", stock navigation still loading after a
+cold boot) also covers plane 99 until stock navigation reports ready. It is not deferred: upstream
+removed both workarounds (luka-dev/mib2q-carplay-rgi 2969ed8) because neither cleared it on the car.
+The NAVSD BAP module stays off until Java navigation registers its cluster listener, and
+OP_State NORMAL needs the native readiness report, so there is nothing to override in that window
+([STOCK_NAV_READINESS.md](https://github.com/luka-dev/mib2q-carplay-rgi/blob/main/docs/cluster-and-rgi/STOCK_NAV_READINESS.md)).
 
 Java: `-Dcarplay.altscreen.liveFile=…` if `ALTR_LIVE_FILE` changes.
 

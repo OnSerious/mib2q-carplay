@@ -180,6 +180,8 @@ case $ACT in
         on_off "Android-Auto-Tachokarte" /mnt/app/root/aa_cluster.off "AUS" "AN (Standard)"
         on_off "Android-Auto Tag/Nacht" /mnt/app/root/aa_cluster.daynight "AN" "AUS (Standard)"
         on_off "Ausfuehrliches Log" /mnt/app/carplay_verbose "AN" "AUS (Standard)"
+        on_off "Navi-Start-Hilfe (Startanfrage erneut)" /mnt/app/root/carplay_domain_rescue.off "AUS" "AN (Standard)"
+        on_off "Navi-Start-Vorrang" /mnt/app/root/carplay_nav_boost.off "AUS" "AN (Standard)"
         for f in mibr-carplay111-safearea.conf mibr-carplay111-safearea-small.conf mibr-carplay111-safearea-sport.conf; do
             [ -e "/mnt/app/root/$f" ] && echo "Eigener Kartenrand gesetzt: $f"
         done
@@ -218,6 +220,21 @@ case $ACT in
             : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
             sync
             echo "FERTIG. 2-Min-Verzoegerung AN: Hardware-Decoder erst 2 Min nach MMI-Start (bis dahin Software)."
+        fi
+        ;;
+    verbose)
+        # Full diagnostics that survive a reboot: hook/Java/renderer INFO logs, the boot slog
+        # snapshots and the power-on navigation boost trace. Default OFF so the boot stays light.
+        # "Save logs" also turns verbose on, but only until the next reboot (/tmp).
+        M=/mnt/app/carplay_verbose
+        mount -uw /mnt/app 2>/dev/null
+        if [ -e "$M" ]; then
+            rm -f "$M"; sync
+            echo "FERTIG. Ausfuehrliches Log AUS ab dem naechsten Neustart (nur Warnungen)."
+        else
+            : > "$M" || { echo "FAILED: cannot create $M"; exit 1; }
+            sync
+            echo "FERTIG. Ausfuehrliches Log AN, auch nach Neustart. Nochmal druecken = AUS."
         fi
         ;;
     siri_short)
@@ -282,7 +299,7 @@ case $ACT in
         echo "FERTIG. Menue entfernt; verschwindet nach dem naechsten Neustart."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|appcard|longpress|status|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|verbose|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|sportview|appcard|longpress|status|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac

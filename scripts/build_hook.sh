@@ -70,6 +70,9 @@ docker run --rm --platform=linux/amd64 -v "$PROJECT_DIR":/src "$IMG" bash -c '
   n=$($NM -an /tmp/check_hook.so | grep -cE "rgd_module_(init|fini)" || true)
   [ "$n" = "0" ] || { echo "REJECTED: $n eager RGD constructor/destructor symbols"; exit 1; }
   echo "  built build/libcarplay_hook.so (emutls=0 init_array=compiler-only)"
+  # nav_boost: carplay_monitor.sh raises native navigation during a power-on session.
+  $CC -O2 -std=gnu99 -Wall -Werror /src/navboost/nav_boost.c -o /src/build/nav_boost
+  echo "  built build/nav_boost"
 '
 
 echo ""

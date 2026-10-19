@@ -8,10 +8,34 @@ OWNER_FILE=${OWNER_FILE:-/tmp/carplay_supervisor.owner}
 # Power-on gate: native navigation misses its ~60 s service-manager start deadline when a phone
 # session starts in the same window, and is relaunched (carplay_logs 024/027).  The renderers
 # are useless before navigation exists, so the first start after power-on waits for Java's
-# NavReadyMarker, at most NAV_WAIT_MAX_S in total across generations.  /tmp is RAM.
+# NavReadyMarker, at most NAV_WAIT_MAX_S in total across generations.  /tmp is RAM.  With a
+# dongle at power-on navigation took 2-4 min (carplay_logs_fixed/_last); renderers started at
+# 90 s only added EGL/decoder start-up load to that window, so the cap is 300 s.
 NAV_READY=${NAV_READY:-/tmp/carplay_nav_ready}
 NAV_GATE=${NAV_GATE:-/tmp/carplay_renderer_gate}
-NAV_WAIT_MAX_S=${NAV_WAIT_MAX_S:-90}
+NAV_WAIT_MAX_S=${NAV_WAIT_MAX_S:-300}
+# Diagnostics (boot snapshots, boost trace) only with verbose logging; the persistent marker is
+# GEM CarPlay-RGI -> "Verbose logging ON / OFF", the /tmp one is made by "Save logs".
+VERBOSE_MARKERS=${VERBOSE_MARKERS:-/mnt/app/carplay_verbose /tmp/carplay_verbose}
+# Power-on navigation boost: navigation's start-up threads (priority 10) wait on the eMMC driver
+# and io-pkt behind the projection session's priority-10 work; NavSDK start took 54-56 s instead
+# of 2.8 s.  nav_boost moves its priority-10 threads to 12 (servers inherit the client's
+# priority) until navigation is up, then puts back exactly the threads it raised (recorded in
+# NAV_BOOST_STATE).  Off: /mnt/app/root/carplay_nav_boost.off.
+NAV_BOOST_MARK=${NAV_BOOST_MARK:-/tmp/carplay_nav_boost.started}
+NAV_BOOST_STATE=${NAV_BOOST_STATE:-/tmp/carplay_nav_boost.state}
+NAV_BOOST_OFF=${NAV_BOOST_OFF:-/mnt/app/root/carplay_nav_boost.off}
+NAV_BOOST_FROM=${NAV_BOOST_FROM:-10}
+NAV_BOOST_TO=${NAV_BOOST_TO:-12}
+NAV_BOOST_MAX_S=${NAV_BOOST_MAX_S:-300}
+NAV_BOOST_NAMES=${NAV_BOOST_NAMES:-AppStartATF navStartup PNavApp DRController IconProviderApp}
+# Boot-time slog snapshots (verbose only): the slog ring holds only ~2 min, so a "Save logs" made
+# after a failed navigation start has already lost it (carplay_logs_hang).  Taken once per boot,
+# only when the first session starts before navigation is up; the logging mod copies
+# /tmp/carplay_* to the card.
+BOOT_SNAP_MARK=${BOOT_SNAP_MARK:-/tmp/carplay_boot_snap.started}
+BOOT_SNAP_PREFIX=${BOOT_SNAP_PREFIX:-/tmp/carplay_boot_slog_}
+BOOT_SNAP_AT=${BOOT_SNAP_AT:-60 240}
 DIO_PID=${1:-}
 
 case "$DIO_PID" in
@@ -129,6 +153,71 @@ monitor_nav_gate()
     return 0
 }
 
+monitor_verbose()
+{
+    for MON_V in $VERBOSE_MARKERS; do
+        [ -e "$MON_V" ] && return 0
+    done
+    return 1
+}
+
+# Once per boot (noclobber create is exclusive: CarPlay and Android Auto monitors may race; not
+# mkdir: /tmp is /dev/shmem on the unit, which has no directories), and only while
+# navigation is not up yet: a detached job saves sloginfo + the navigation processes
+# BOOT_SNAP_AT seconds after this first session start.  Never tied to this generation.
+monitor_boot_snapshot()
+{
+    monitor_verbose || return 0
+    [ -e "$NAV_READY" ] && return 0
+    ( set -C; : > "$BOOT_SNAP_MARK" ) 2>/dev/null || return 0
+    echo "[monitor] navigation not up at first session start; boot slog snapshots in ${BOOT_SNAP_AT}s" >> "$WLOG"
+    (
+        MON_SNAP_DONE=0
+        for MON_SNAP_AT in $BOOT_SNAP_AT; do
+            sleep `expr "$MON_SNAP_AT" - "$MON_SNAP_DONE"`
+            MON_SNAP_DONE=$MON_SNAP_AT
+            MON_SNAP_FILE=$BOOT_SNAP_PREFIX${MON_SNAP_AT}s.txt
+            {
+                echo "== $MON_SNAP_AT s after the first session start; nav_ready=`[ -e "$NAV_READY" ] && echo yes || echo no`"
+                pidin ar 2>&1 | grep -i 'navigation\|AppStartATF\|navStartup'
+                echo "== sloginfo"
+                sloginfo 2>&1
+            } > "$MON_SNAP_FILE" 2>&1
+        done
+    ) </dev/null >/dev/null 2>&1 &
+}
+
+# Once per boot, only when the first session starts before navigation is up (the power-on
+# case): a detached job re-applies the boost every 2 s, so a relaunched navigation is caught too,
+# until NavReadyMarker or NAV_BOOST_MAX_S, then restores the threads it raised.  Never tied to this
+# generation; logs only with verbose.
+monitor_nav_boost()
+{
+    [ -e "$NAV_READY" ] && return 0
+    [ -x "$H/nav_boost" ] || return 0
+    [ -e "$NAV_BOOST_OFF" ] && return 0
+    ( set -C; : > "$NAV_BOOST_MARK" ) 2>/dev/null || return 0
+    monitor_verbose &&
+        echo "[monitor] navigation not up at first session start: priority $NAV_BOOST_FROM -> $NAV_BOOST_TO until it is up (max ${NAV_BOOST_MAX_S}s)" >> "$WLOG"
+    (
+        MON_BOOST_T=0
+        rm -f "$NAV_BOOST_STATE"
+        while [ ! -e "$NAV_READY" ] && [ "$MON_BOOST_T" -lt "$NAV_BOOST_MAX_S" ]; do
+            MON_BOOST_OUT=`"$H/nav_boost" "$NAV_BOOST_FROM" "$NAV_BOOST_TO" "$NAV_BOOST_STATE" $NAV_BOOST_NAMES 2>&1`
+            case "$MON_BOOST_OUT" in
+                '0 '*) ;;
+                *) monitor_verbose &&
+                       echo "[monitor] nav boost +${MON_BOOST_T}s: threads/processes $MON_BOOST_OUT" >> "$WLOG" ;;
+            esac
+            sleep 2
+            MON_BOOST_T=`expr "$MON_BOOST_T" + 2`
+        done
+        MON_BOOST_OUT=`"$H/nav_boost" -r "$NAV_BOOST_STATE" 2>&1`
+        monitor_verbose &&
+            echo "[monitor] nav boost ended after ${MON_BOOST_T}s (nav_ready=`[ -e "$NAV_READY" ] && echo yes || echo no`): restored $MON_BOOST_OUT" >> "$WLOG"
+    ) </dev/null >/dev/null 2>&1 &
+}
+
 monitor_main()
 {
     trap 'exit 0' 1 2 15
@@ -142,6 +231,8 @@ monitor_main()
     echo "[monitor] generation=$DIO_PID active" >> "$WLOG"
 
     cp_seed_renderer_pid_files
+    monitor_nav_boost
+    monitor_boot_snapshot
     monitor_nav_gate || exit 0
     start_renderer maneuver_render initial
     # AltScreen CarPlay-video renderer (optional): started only when installed.

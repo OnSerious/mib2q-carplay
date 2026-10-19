@@ -1,6 +1,6 @@
 /* vehicle_hook: $PASCD equals the MFi R32 41.3.3 examples byte for byte, VehicleStatusUpdate
  * and the Identify components follow MFi R29 97-19..97-21 / 97-161..97-162, and the module
- * flow (start/stop, 1 Hz limit, batching, stock-PASCD and rejection fallbacks) runs on stubs. */
+ * flow (start/stop, 1 Hz limit, batching, stock-PASCD fallback, undeclared messages) runs on stubs. */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,13 +107,6 @@ int main(void) {
         n = veh_build_identify_components(out, sizeof(out), false, 0);
         assert(!iap2_find_tlv(out, n, 20, &t) && iap2_find_tlv(out, n, 21, &t) && t.len == n);
     }
-    {
-        static const uint8_t rej_comp[] = { 0x00, 0x04, 0x00, 0x15 };
-        static const uint8_t rej_msg[] = { 0x00, 0x08, 0x00, 0x07, 0x41, 0x71, 0xA1, 0x00 };
-        static const uint8_t rej_other[] = { 0x00, 0x06, 0x00, 0x06, 0x41, 0x70, 0x00, 0x04, 0x00, 0x16 };
-        assert(veh_rejection_is_ours(rej_comp, sizeof(rej_comp)) && veh_rejection_is_ours(rej_msg, sizeof(rej_msg)));
-        assert(!veh_rejection_is_ours(rej_other, sizeof(rej_other)));
-    }
 
     /* ---- module flow ---- */
     veh_test_set_clock(clock_stub);
@@ -123,13 +116,19 @@ int main(void) {
 
     /* Identify: appended behind the stock TLVs in the grown buffer, header length follows. */
     {
-        uint8_t ident[64] = { 0x40, 0x40, 0x00, 0x0E, 0x1D, 0x01,
-                              0x00, 0x08, 0x00, 0x16, 0x00, 0x04, 0x00, 0x14 };   /* 22 { VehicleSpeedData } */
+        uint8_t ident[64] = { 0x40, 0x40, 0x00, 0x1C, 0x1D, 0x01,
+                              0x00, 0x08, 0x00, 0x16, 0x00, 0x04, 0x00, 0x14,     /* 22 { VehicleSpeedData } */
+                              0x00, 0x06, 0x00, 0x06, 0xA1, 0x01,                 /* 6 sent { 0xA101 } */
+                              0x00, 0x08, 0x00, 0x07, 0xA1, 0x00, 0xA1, 0x02 };   /* 7 received { 0xA100, 0xA102 } */
         grow_src = ident;
-        n = vehicle_module_def.on_identify(&ctx, ident, 14, 14);
-        assert(n > 14 && big[2] == (uint8_t)(n >> 8) && big[3] == (uint8_t)n);
-        assert(!memcmp(big, ident, 2) && !memcmp(big + 4, ident + 4, 10));
+        n = vehicle_module_def.on_identify(&ctx, ident, 28, 28);
+        assert(n > 28 && big[2] == (uint8_t)(n >> 8) && big[3] == (uint8_t)n);
+        assert(!memcmp(big, ident, 2) && !memcmp(big + 4, ident + 4, 24));
         { iap2_tlv_t t; assert(iap2_find_tlv(big + 6, n - 6, 20, &t) && iap2_find_tlv(big + 6, n - 6, 21, &t)); }
+        /* Without 0xA102 in the received list iOS would reject component 21: nothing is added. */
+        vehicle_module_def.on_state(&ctx, HOOK_EVENT_IDENTIFY_START, NULL);
+        ident[3] = 0x1A; ident[21] = 0x06;
+        assert(vehicle_module_def.on_identify(&ctx, ident, 26, sizeof(ident)) == 26);
     }
 
     /* VehicleStatus: nothing before the phone asks; on start the snapshot goes out at once. */
@@ -192,18 +191,6 @@ int main(void) {
     for (i = 0; i < 10; i++) { now_ms += 200; cmd(500, VEH_GEAR_DRIVE, 300, 203, false, 0x1F); }
     assert(sent_count == 2);
 
-    /* New Identify: state resets; a rejection naming component 21 turns the patch off. */
-    vehicle_module_def.on_state(&ctx, HOOK_EVENT_IDENTIFY_START, NULL);
-    {
-        uint8_t ident[64] = { 0x40, 0x40, 0x00, 0x06, 0x1D, 0x01 };
-        static const uint8_t rej[] = { 0x00, 0x04, 0x00, 0x15 };
-        assert(vehicle_module_def.on_identify(&ctx, ident, 6, sizeof(ident)) > 6);
-        deliver(&ctx, MSG_DIR_INCOMING, 0x1D03, rej, sizeof(rej));
-        vehicle_module_def.on_state(&ctx, HOOK_EVENT_IDENTIFY_START, NULL);
-        ident[3] = 6;
-        assert(vehicle_module_def.on_identify(&ctx, ident, 6, sizeof(ident)) == 6);
-    }
-
     /* Malformed input never crashes or overruns. */
     srand(11);
     for (i = 0; i < 100000; i++) {
@@ -213,9 +200,8 @@ int main(void) {
         for (j = 0; j < len; j++) buf[j] = (uint8_t)rand();
         (void)veh_parse_start_status(buf, len);
         (void)veh_location_wants_speed(buf, len);
-        (void)veh_rejection_is_ours(buf, len);
         if (veh_parse_cmd(buf, len, &c)) assert(veh_build_status_update(out, sizeof(out), 7, &c) <= sizeof(out));
     }
-    puts("vehicle_hook_test: R32 PASCD examples byte-exact, R29 VehicleStatus/Identify layouts, start/stop, 1 Hz limit, batching, gap, stock-PASCD and rejection fallbacks, 100000 malformed inputs PASS");
+    puts("vehicle_hook_test: R32 PASCD examples byte-exact, R29 VehicleStatus/Identify layouts, start/stop, 1 Hz limit, batching, gap, stock-PASCD fallback, undeclared messages, 100000 malformed inputs PASS");
     return 0;
 }

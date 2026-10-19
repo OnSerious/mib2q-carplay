@@ -23,6 +23,7 @@ ON_UNIT=/mnt/app/eso/hmi/engdefs/scripts/carplay
 BUTTONS="
 install|install|CarPlay installieren / aktualisieren (Release auf der SD-Karte)
 logs|logs|Logs auf SD-Karte speichern (schaltet ausfuehrliches Log an)
+verbose|verbose|Ausfuehrliches Log AN / AUS (bleibt nach Neustart, Standard AUS)
 status|status|Status anzeigen: welche Schalter gesetzt sind
 longpress|longpress|Langdruck linke Walze = Original-Audi-Karte AN / AUS (Standard AN)
 appcard|appcard|App-Abbiegekarte im Tacho waehrend Route AN / AUS (Standard AUS)
