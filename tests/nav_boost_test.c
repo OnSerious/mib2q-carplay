@@ -263,6 +263,20 @@ int main(void)
     check(run("10", "12", state, "navStartup", NULL) == 0 && prio_of(0, 1) == 12, "next run boosts");
     check(run("-r", state, NULL) == 0 && prio_of(0, 1) == 10, "and restores");
 
+    /* parent and child both running before the first scan: the child's stock 12 is its own,
+     * even though the parent is recorded first in the same scan; its 10 is still restored. */
+    memset(P, 0, sizeof P);
+    a = add_proc(0, 100, 1, 5000, "navStartup");
+    add_thread(a, 1, 10, 5001);
+    b = add_proc(1, 200, 100, 6000, "AppStartATF");
+    add_thread(b, 1, 12, 6001); add_thread(b, 2, 10, 6002);
+    check(run("10", "12", state, "navStartup", "AppStartATF", NULL) == 0, "boost both present");
+    check(prio_of(1, 2) == 12, "child's 10 raised");
+    check(run("10", "12", state, "navStartup", "AppStartATF", NULL) == 0, "boost both present 2");
+    check(run("-r", state, NULL) == 0, "restore both present");
+    check(prio_of(1, 1) == 12, "pre-existing child's stock 12 kept");
+    check(prio_of(1, 2) == 10 && prio_of(0, 1) == 10, "raised threads restored");
+
     printf("nav_boost_test: raise/record order, restore of boosted, thread- and spawn-inherited "
            "threads, stock 12 kept, pid reuse, write failure, %d checks PASS\n", checks);
     return 0;

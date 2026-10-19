@@ -11,9 +11,10 @@
  * matched>".  The first time a process is seen, before any of its threads is changed, <state>
  * gets "P pid start from to" (start = process start time, so a reused pid is a new process) and
  * "N pid tid start" for each of its threads already at <to>: those keep <to> at restore (none
- * for a process spawned by a boosted one: it started at its parent's raised priority).  The
- * record goes out in one write() first; if it cannot be written whole, the file is cut back to
- * before it and that process and every later one is left alone (exit 1).
+ * for a process spawned by one boosted in an earlier run: it started at its parent's raised
+ * priority).  Every matching process is recorded before any thread is raised, each record in one
+ * write(); if one cannot be written whole, the file is cut back to before it and that process and
+ * every later one is left alone (exit 1).
  *
  * Restore: in every recorded process that still runs, every thread at base priority <to> that is
  * not an "N" thread goes back to <from>.  That includes threads created by a boosted thread
@@ -160,18 +161,23 @@ static int proc_start(int fd, unsigned long long *start, int *parent)
     return 0;
 }
 
+/* Processes recorded by an earlier run (loaded from <state>); this run records after them. */
+static int nprocs_loaded;
+
 static int boosted_pid(int pid)
 {
     int i;
-    for (i = 0; i < nprocs; i++)
+    for (i = 0; i < nprocs_loaded; i++)
         if (procs[i].pid == pid) return 1;
     return 0;
 }
 
 /* First sight of a process: its record and its threads already at <to>, written in one write()
- * before any change.  A process spawned by a boosted one (navStartup relaunching a child) starts
- * at its parent's raised priority, so none of its threads is recorded as already at <to>.  A
- * short or failed write is cut back to where this record began. */
+ * before any change.  A process whose parent an earlier run recorded, and which that run did not
+ * see (every matching process is recorded before anything is raised), was spawned while the
+ * parent was boosted (navStartup relaunching a child): it started at the raised priority, so none
+ * of its threads is recorded as already at <to>.  A short or failed write is cut back to where
+ * this record began. */
 static int record_proc(int sfd, int pid, int fd, unsigned long long start, int parent,
                        int from, int to)
 {
@@ -221,14 +227,18 @@ static int retune(pid_t pid, int fd, int from, int to)
     return changed;
 }
 
+#define MAX_MATCHED 64
+
 static int boost(int from, int to, const char *state_path, char **names, int count)
 {
-    int changed = 0, matched = 0, failed = 0;
+    struct { pid_t pid; int fd, parent; unsigned long long start; } m[MAX_MATCHED];
+    int changed = 0, matched = 0, failed = 0, nm = 0, ok, i;
     DIR *proc;
     struct dirent *de;
     int sfd;
 
     load_state(state_path);
+    nprocs_loaded = nprocs;
     sfd = open(state_path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     if (sfd < 0) {
         perror("nav_boost: state");
@@ -240,7 +250,7 @@ static int boost(int from, int to, const char *state_path, char **names, int cou
         close(sfd);
         return 1;
     }
-    while (!failed && (de = readdir(proc)) != NULL) {
+    while ((de = readdir(proc)) != NULL && nm < MAX_MATCHED) {
         char path[64];
         struct {
             procfs_debuginfo info;
@@ -249,8 +259,6 @@ static int boost(int from, int to, const char *state_path, char **names, int cou
         pid_t pid;
         int fd;
         char *end;
-        unsigned long long start;
-        int parent;
 
         pid = (pid_t)strtol(de->d_name, &end, 10);
         if (*de->d_name == '\0' || *end != '\0' || pid <= 1) continue;
@@ -260,20 +268,35 @@ static int boost(int from, int to, const char *state_path, char **names, int cou
         memset(&name, 0, sizeof name);
         if (devctl(fd, DCMD_PROC_MAPDEBUG_BASE, &name, sizeof name, NULL) == EOK
                 && wanted(name.info.path, names, count)
-                && proc_start(fd, &start, &parent) == 0) {
-            matched++;
-            if (!known_proc((int)pid, start)
-                    && record_proc(sfd, (int)pid, fd, start, parent, from, to) != 0) {
-                fprintf(stderr, "nav_boost: cannot record %d in %s, boost stopped\n",
-                        (int)pid, state_path);
-                failed = 1;
-            } else {
-                changed += retune(pid, fd, from, to);
-            }
+                && proc_start(fd, &m[nm].start, &m[nm].parent) == 0) {
+            m[nm].pid = pid;
+            m[nm].fd = fd;
+            nm++;
+        } else {
+            close(fd);
         }
-        close(fd);
     }
     closedir(proc);
+
+    /* Record every new process first, then raise: a parent recorded in this same scan says
+     * nothing about how its already running children got their priority. */
+    for (ok = 0; ok < nm; ok++) {
+        if (!known_proc((int)m[ok].pid, m[ok].start)
+                && record_proc(sfd, (int)m[ok].pid, m[ok].fd, m[ok].start, m[ok].parent,
+                               from, to) != 0) {
+            fprintf(stderr, "nav_boost: cannot record %d in %s, boost stopped\n",
+                    (int)m[ok].pid, state_path);
+            failed = 1;
+            break;
+        }
+    }
+    for (i = 0; i < nm; i++) {
+        if (i < ok) {
+            matched++;
+            changed += retune(m[i].pid, m[i].fd, from, to);
+        }
+        close(m[i].fd);
+    }
     close(sfd);
     printf("%d %d\n", changed, matched);
     return failed;
@@ -322,7 +345,7 @@ int main(int argc, char **argv)
 {
     int from, to;
 
-    nprocs = nnatives = 0;              /* one run per process; reset for the host test */
+    nprocs = nnatives = nprocs_loaded = 0;              /* one run per process; reset for the host test */
     if (argc == 3 && strcmp(argv[1], "-r") == 0)
         return restore(argv[2]);
     if (argc < 5 || parse_prio(argv[1], &from) != 0 || parse_prio(argv[2], &to) != 0) {
