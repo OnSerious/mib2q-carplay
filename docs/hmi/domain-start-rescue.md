@@ -31,6 +31,19 @@ trigger (switching off with CarPlay still active) is the same last-mode conditio
 | AA 020 (healthy) | 12.8 s, after medialauncher's reset | at once | 15.7 s, up at 23 s |
 | dongle 027 | 7.07 s, before the reset | timed out 27.07 s | 32.8 s, timed out 52 s and 80 s, relaunched |
 
+Why a late start ends in a dead navigation (stock behaviour, from upstream's static analysis of
+`navStartup`/`servicemgr`, [STOCK_NAV_READINESS.md](https://github.com/luka-dev/mib2q-carplay-rgi/blob/main/docs/cluster-and-rgi/STOCK_NAV_READINESS.md)):
+navigation is started only by the HMI's `startDomain(Nav, 0x700)`, never at system start. `navStartup`
+then has three handshakes with the engine (startup counter, `INITNAV`, `RUNNAV`), each with a 60 s
+timeout, and the launcher's `run` phase has its own 60 s timeout. A failure is restarted at most 3 times
+in 600 s, then the process is killed (`on_restart_failed: kill_process`): the "no `navStartup` in
+`pidin`" case. Healthy reference: `startDomain` <= 20 s, `APP_RUN_MODE 1796` (0x704, DR+COMM+NAV) at
+~26 s. Grep a boot with:
+
+```sh
+sloginfo | grep -e startDomain -e APP_RUN_MODE -e updateDomainStatus -e "NAVI: Startup"
+```
+
 ## The fix
 
 `DomainStartRescue` replaces no stock class. Started once from `DisplayManagerMIB2High`'s constructor
@@ -38,11 +51,12 @@ trigger (switching off with CarPlay still active) is the same last-mode conditio
 under the stock `DOMAIN_SYNCER` lock, for the **Media** domain only and for 60 s. When the last
 request is unanswered, the domain reported a newer, non-failed state after it, the request is at least
 2 s old and that state 1 s old, it sends the same `DSIStartup.startDomain(id, state)` stock sends after
-its timeout. At most 2 re-sends per request, 3 s apart. The stock wait then returns on the answer.
+its timeout. The request is re-read and sent while holding `DOMAIN_SYNCER`, as stock `doStartDomain`
+does, so an answer or a newer stock request that arrived in the meantime is never overtaken. At most 2 re-sends per request, 3 s apart. The stock wait then returns on the answer.
 
 Everything stock is reached by reflection, resolved and type-checked once. Any mismatch logs
 `DomainRescue: stock startup layout differs, disabled` and leaves stock behaviour. A re-send logs
-`DomainRescue: Media startDomain(0xd00) unanswered ... re-sending #1` (WARN, always in
+`DomainRescue: Media startDomain(0xd00) unanswered ... re-sent #1` (WARN, always in
 `/tmp/carplay_java.log`).
 
 ## Switching it off / recovery
