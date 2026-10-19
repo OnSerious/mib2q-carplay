@@ -63,8 +63,12 @@ No hook is involved. Opt-out: `/mnt/app/carplay_aa_phone_tab.off`. Test:
 range, outside temperature and the fuel warning five times a second and sends them as
 `CMD_VEHICLE 0x0118`. The hook turns them into `$PASCD` sentences (wheel speed, once the phone
 asks) and VehicleStatusUpdate 0xA101 (range, temperature, low-range warning, at most 1 Hz).
-A rejected Identify that names these components switches them off for the rest of the process,
-so the next connect identifies like stock.
+iOS accepts the VehicleStatusComponent (Identify param 21) only when the Identify also declares
+StartVehicleStatusUpdates 0xA100, VehicleStatusUpdate 0xA101 and StopVehicleStatusUpdates 0xA102;
+otherwise it rejects it. So the hook appends the vehicle components only when Cinemo's Identify
+lists all three, that is, when the installer's `dio_manager.json` change is active (see Install), and
+logs it otherwise. There is no rejection fallback: SI starts a new `dio_manager` for every connect,
+so a per-process fallback re-sent the rejected component every time (upstream c86bc3d, issue #53).
 
 `carplay_startup.sh` switches: `IAP2_VEHICLE_STATUS`, `IAP2_VEHICLE_SPEED`, `IAP2_PHONE_BATTERY`
 (all `on`) and `IAP2_VEHICLE_ENGINE` (`gasoline`; one word `gasoline` / `diesel` / `electric` /

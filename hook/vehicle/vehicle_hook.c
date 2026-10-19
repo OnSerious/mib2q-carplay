@@ -11,9 +11,9 @@
  *   sentence; StartLocationInformation 0xFFFA param 4 = VehicleSpeedData.
  *
  * Every message here is an extra one through the stock SendIAP2 worker; stock's own location,
- * power and identification traffic is never replaced.  A rejected Identify that names our
- * components or messages switches the components off for the rest of the process, so the
- * next phone connect identifies exactly like stock.
+ * power and identification traffic is never replaced.  Component 21 goes into the Identify only
+ * when the Identify also declares its three messages, which is what iOS checks before accepting
+ * it, so the phone has no reason to reject it.
  *
  * Copyright (c) 2026 LuKa (@LuKa_dev)
  */
@@ -27,7 +27,6 @@
 
 DEFINE_LOG_MODULE(VEHICLE);
 
-#define MSG_IDENTIFY_REJECTED       0x1D03
 #define MSG_START_VEHICLE_STATUS    0xA100
 #define MSG_VEHICLE_STATUS_UPDATE   0xA101
 #define MSG_STOP_VEHICLE_STATUS     0xA102
@@ -48,7 +47,7 @@ DEFINE_LOG_MODULE(VEHICLE);
 #define PASCD_GAP_MS                2000u   /* older samples are dropped, not sent late */
 
 static const uint16_t veh_msg_filter[] = {
-    MSG_IDENTIFY_REJECTED, MSG_START_VEHICLE_STATUS, MSG_STOP_VEHICLE_STATUS,
+    MSG_START_VEHICLE_STATUS, MSG_STOP_VEHICLE_STATUS,
     IAP2_MSG_START_LOCATION, IAP2_MSG_STOP_LOCATION, IAP2_MSG_LOCATION_INFO,
 };
 
@@ -143,26 +142,6 @@ size_t veh_build_identify_components(uint8_t* out, size_t out_max, bool add_info
     return put_tlv(out, out_max, off, IDENT_VEHICLE_STATUS, g, n);
 }
 
-static bool u16_array_has_ours(const iap2_tlv_t* t) {
-    size_t i;
-    for (i = 0; i + 1 < t->value_len; i += 2) {
-        uint16_t id = (uint16_t)((t->value[i] << 8) | t->value[i + 1]);
-        if (id >= MSG_START_VEHICLE_STATUS && id <= MSG_STOP_VEHICLE_STATUS) return true;
-    }
-    return false;
-}
-
-bool veh_rejection_is_ours(const uint8_t* payload, size_t len) {
-    iap2_tlv_t t;
-    size_t off = 0;
-    while (payload && off < len && iap2_parse_tlv(payload + off, len - off, &t)) {
-        if (t.id == IDENT_VEHICLE_INFORMATION || t.id == IDENT_VEHICLE_STATUS) return true;
-        if ((t.id == 6 || t.id == 7) && u16_array_has_ours(&t)) return true;
-        off += t.len;
-    }
-    return false;
-}
-
 static char pascd_state(const veh_sample_t* s, size_t n) {
     size_t i;
     for (i = 0; i < n; i++) if (s[i].gear == VEH_GEAR_REVERSE) return 'R';
@@ -204,8 +183,6 @@ size_t veh_format_pascd(char* out, size_t out_max, const veh_sample_t* s, size_t
 static pthread_mutex_t veh_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool veh_status_on, veh_speed_on;
 static uint8_t veh_engine = VEH_ENGINE_GASOLINE;
-static bool veh_identify_disabled;          /* a rejection named our additions: process lifetime */
-static bool veh_patched_cycle;
 static uint8_t veh_want;                    /* VehicleStatus subscription, 0 = none */
 static veh_cmd_t veh_now_state, veh_sent_state;
 static bool veh_have_state, veh_sent_any;
@@ -389,12 +366,6 @@ static bool veh_on_message(hook_context_t* ctx, const iap2_frame_t* f) {
                 veh_pascd_active = false;
                 veh_buf_n = 0;
                 break;
-            case MSG_IDENTIFY_REJECTED:
-                if (veh_patched_cycle && veh_rejection_is_ours(f->payload, f->payload_len)) {
-                    veh_identify_disabled = true;
-                    LOG_WARN(LOG_MODULE, "Identify rejected our vehicle components; off until dio_manager restarts");
-                }
-                break;
             default:
                 break;
         }
@@ -420,6 +391,16 @@ static bool identify_has_speed(const uint8_t* buf, size_t len) {
     return iap2_find_tlv(buf + 6 + off + 4, (size_t)clen - 4, LOCATION_VEHICLE_SPEED, &t);
 }
 
+/* The Identify's message list `list` (6 = sent by us, 7 = received from the phone) holds `id`. */
+static bool identify_lists_msg(const uint8_t* buf, size_t len, uint16_t list, uint16_t id) {
+    iap2_tlv_t t;
+    size_t i;
+    if (!iap2_find_tlv(buf + 6, len - 6, list, &t)) return false;
+    for (i = 0; i + 1 < t.value_len; i += 2)
+        if ((uint16_t)((t.value[i] << 8) | t.value[i + 1]) == id) return true;
+    return false;
+}
+
 static size_t veh_on_identify(hook_context_t* ctx, uint8_t* buf, size_t len, size_t max_len) {
     uint8_t add[192];
     uint16_t info_len = 0, status_len = 0;
@@ -427,11 +408,19 @@ static size_t veh_on_identify(hook_context_t* ctx, uint8_t* buf, size_t len, siz
     if (!buf || len < 6) return len;
     if (veh_speed_on && !identify_has_speed(buf, len))
         LOG_WARN(LOG_MODULE, "Identify has no VehicleSpeedData: set dio_manager.json \"nmea\" bit 0x08 (installer) for PASCD");
-    if (!veh_status_on || veh_identify_disabled) return len;
+    if (!veh_status_on) return len;
     (void)iap2_find_tlv_offset(buf + 6, len - 6, IDENT_VEHICLE_INFORMATION, &info_len);
     (void)iap2_find_tlv_offset(buf + 6, len - 6, IDENT_VEHICLE_STATUS, &status_len);
     if (status_len) {
         LOG_WARN(LOG_MODULE, "stock Identify already carries a VehicleStatusComponent; left as is");
+        return len;
+    }
+    /* iOS rejects component 21 unless all three messages are declared (CoreAccessories
+     * _checkIdentificationInfo_19, iOS 26.1); the installer adds them to dio_manager.json. */
+    if (!identify_lists_msg(buf, len, 6, MSG_VEHICLE_STATUS_UPDATE) ||
+        !identify_lists_msg(buf, len, 7, MSG_START_VEHICLE_STATUS) ||
+        !identify_lists_msg(buf, len, 7, MSG_STOP_VEHICLE_STATUS)) {
+        LOG_WARN(LOG_MODULE, "Identify does not declare 0xA100/0xA101/0xA102 (dio_manager.json not patched): no VehicleStatus");
         return len;
     }
     n = veh_build_identify_components(add, sizeof(add), info_len == 0, veh_engine);
@@ -449,9 +438,6 @@ static size_t veh_on_identify(hook_context_t* ctx, uint8_t* buf, size_t len, siz
     memcpy(buf + len, add, n);
     write_be16(buf + 2, (uint16_t)new_len);
     if (ctx && ctx->_priv) *(unsigned int*)((char*)ctx->_priv + 4) = (unsigned int)new_len;
-    pthread_mutex_lock(&veh_lock);
-    veh_patched_cycle = true;
-    pthread_mutex_unlock(&veh_lock);
     LOG_WARN(LOG_MODULE, "Identify: +VehicleStatus%s (%zu -> %zu bytes)",
              info_len ? "" : " +VehicleInformation", len, new_len);
     return new_len;
@@ -461,7 +447,6 @@ static void veh_on_state(hook_context_t* ctx, int event, void* data) {
     (void)ctx; (void)data;
     if (event != HOOK_EVENT_IDENTIFY_START && event != HOOK_EVENT_DISCONNECT) return;
     pthread_mutex_lock(&veh_lock);
-    veh_patched_cycle = false;
     veh_want = 0;
     veh_sent_any = false;
     veh_pascd_active = false;
