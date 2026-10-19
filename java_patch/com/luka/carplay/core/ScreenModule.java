@@ -141,8 +141,6 @@ public final class ScreenModule implements Module {
         if (altScreenActive == active) return;
         altScreenActive = active;
         Log.i(TAG, "altScreen video " + (active ? "live -> ctx 81/82" : "stopped -> ctx 74/80"));
-        /* Stock NAVSD INITIALIZING must not cover the phone video on plane 99. */
-        ScreenNavStatusGate.setAltScreenActive(active);
         republish();
     }
 
@@ -294,7 +292,6 @@ public final class ScreenModule implements Module {
             desiredCtx = CTX_STOCK_CLUSTER;
             sendRgiStateLocked();   /* navActive is false here: reset the hook's URL state */
         }
-        ScreenNavStatusGate.setAltScreenActive(false);
         CarplayBus.getInstance().on(CarplayBus.EVT_HELLO, HELLO_LISTENER);
         synchronized (LOCK) {
             /* Create the single persistent worker once; recreate only if it never started or died.
@@ -325,7 +322,6 @@ public final class ScreenModule implements Module {
             navHidePending = false;
         }
         CarplayBus.getInstance().off(CarplayBus.EVT_HELLO);
-        ScreenNavStatusGate.setAltScreenActive(false);
         republish();
     }
 

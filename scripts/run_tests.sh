@@ -130,6 +130,14 @@ cc -std=gnu99 -O1 -Wall -Wextra -Werror -Wno-unused-function \
     hook/framework/iap2_protocol.c -o "$OUT/vehicle_hook"
 "$OUT/vehicle_hook"
 
+printf '%-32s ' nav_boost_test
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Itests/stubs/qnx -Dmain=nav_boost_main \
+    -c navboost/nav_boost.c -o "$OUT/nav_boost.o"
+cc -std=gnu99 -O1 -Wall -Wextra -Werror -Itests/stubs/qnx tests/nav_boost_test.c "$OUT/nav_boost.o" \
+    -Wl,--wrap=open,--wrap=close,--wrap=opendir,--wrap=readdir,--wrap=closedir,--wrap=write \
+    -o "$OUT/nav_boost"
+"$OUT/nav_boost"
+
 printf '%-32s ' aa_tee_test
 cc -std=gnu99 -O1 -Wall -Wextra -Werror -Iaa_hook \
     tests/aa_tee_test.c aa_hook/aa_tee.c -lpthread -o "$OUT/aa_tee"

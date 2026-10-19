@@ -47,6 +47,7 @@ final verified fact. `reconciles:` frontmatter records which legacy docs were fo
 - [steering-wheel](input/steering-wheel.md) - MFW roller: rotation = stock zoom, press = route-info toggle
 
 ## 📱 HMI - head-unit screen  [x]
+- [domain-start-rescue](hmi/domain-start-rescue.md) - dropped startDomain(Media) at power-on delays native navigation into a dongle's session; re-sent, off switch, recovery
 - [pdc-small-stage](hmi/pdc-small-stage.md) - CarPlay stays beside the side parking (OPS) popup: small stage, message 108, APS drawer, status line
 
 ## 🚀 Deploy  [x]

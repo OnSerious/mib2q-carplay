@@ -34,7 +34,7 @@ fi
 RELEASE_FILES="libcarplay_hook.so maneuver_render flag_atlas.rgba carplay_startup.sh
 carplay_monitor.sh carplay_processes.sh carplay_cleanup.sh carplay_hook.jar
 carplay_child.json altscreen_render libaltscreen111_mhi2q.so
-libaa_cluster_hook.so aa_startup.sh aa_child.json"
+libaa_cluster_hook.so aa_startup.sh aa_child.json nav_boost"
 for f in $RELEASE_FILES; do
     [ -s "$STAGED/$f" ] || { echo "ERROR: $STAGED/$f missing - run without NO_BUILD=1"; exit 1; }
 done
@@ -81,7 +81,7 @@ curl -fsSL "$FFMPEG_LICENSE_URL" -o "$OUT/licenses/FFmpeg-COPYING.LGPLv2.1" \
     || { echo "ERROR: could not fetch the FFmpeg LGPL text ($FFMPEG_LICENSE_URL)"; exit 1; }
 
 find "$OUT" -name '*.sh' -exec chmod 755 {} +
-chmod 755 "$OUT/SD-CARD/carplay/maneuver_render" "$OUT/SD-CARD/carplay/altscreen_render"
+chmod 755 "$OUT/SD-CARD/carplay/maneuver_render" "$OUT/SD-CARD/carplay/altscreen_render" "$OUT/SD-CARD/carplay/nav_boost"
 
 if command -v sha256sum >/dev/null 2>&1; then SHA="sha256sum"; else SHA="shasum -a 256"; fi
 (cd "$OUT" && find SD-CARD extras -type f | LC_ALL=C sort | xargs $SHA) > "$OUT/SHA256SUMS.txt"

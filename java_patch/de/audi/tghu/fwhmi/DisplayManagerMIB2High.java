@@ -55,6 +55,12 @@ public class DisplayManagerMIB2High extends DisplayManager implements IDisplayLi
         for (int t = 0; t < this.visibleKDKs.length; t++) {
             this.visibleKDKs[t] = DISPLAYABLE_NONE;
         }
+        /* Earliest patched point of the HMI start (~5.7 s), before StartupManager's first
+         * startDomain (~7 s).  start() never throws; the guard covers class loading too. */
+        try {
+            com.luka.carplay.core.DomainStartRescue.start(iframeworkaccess);
+        } catch (Throwable ignored) {
+        }
     }
 
     protected int getMappedInternalContext(int i) {

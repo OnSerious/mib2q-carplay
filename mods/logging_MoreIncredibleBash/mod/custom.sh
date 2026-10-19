@@ -68,6 +68,9 @@ run() {   # run <file> <command...>: best effort, output and errors into <file>
     echo "card        $CARD"
     echo "script      $D/custom.sh"
 } > "$OUT/info.txt"
+# slog first: a wedged unit can stall the later commands (mount output cut at 10240 bytes, #22).
+run sloginfo_mmx.txt sloginfo
+run sloginfo_rcc.txt on -f rcc sloginfo
 run uname.txt uname -a
 run pidin_ar.txt pidin ar
 run pidin_info.txt pidin info
@@ -90,11 +93,9 @@ run pfctl_rules.txt pfctl -sr
 run pfctl_nat.txt pfctl -sn
 run pfctl_info.txt pfctl -si
 run netstat_an.txt netstat -an
-run sloginfo_mmx.txt sloginfo
-run sloginfo_rcc.txt on -f rcc sloginfo
 run hooks_ls.txt ls -la /mnt/app/root/hooks /mnt/app/eso/hmi/lsd/jars /mnt/app/eso/bin/apps/smartphone_integrator
 run carplay_stock_ls.txt find /mnt/app /mnt/system -name '*.carplay-stock'
-run tmp_ls.txt ls -la "$SRC"
+run tmp_ls.txt ls -la "$SRC/"     # /tmp is a symlink to /dev/shmem: list what it points at
 run cores_ls.txt ls -la /mnt/ota/system/core
 
 # ---- hardware H.264 decoder discovery (AltScreen OMX feasibility) ----
@@ -149,6 +150,41 @@ for f in /mnt/ota/system/core/dio_manager* /mnt/ota/system/core/maneuver_render*
          /mnt/ota/system/core/smartphone_integrator* /mnt/ota/system/core/gal* \
          /mnt/ota/system/core/altscreen_render*; do
     [ -f "$f" ] && cp "$f" "$OUT/core/" 2>/dev/null
+done
+# Native navigation that never comes up after power-on (dongle connected at start): the
+# navigation process dumps and Elektrobit's freeze logs (30 rotating files, most of them
+# empty), plus the display manager / video decoder dumps of the videoCore hangs (#10, #14).
+for f in /mnt/ota/system/core/AppStartATF* /mnt/ota/system/core/navStartup* \
+         /mnt/ota/system/core/PNavApp* /mnt/ota/system/core/DRController* \
+         /mnt/ota/system/core/IconProviderApp* /mnt/ota/system/core/EBNavFreezeLog.[0-9]* \
+         /mnt/ota/system/core/displaymanager* /mnt/ota/system/core/vidc*; do
+    [ -f "$f" ] && [ -s "$f" ] && cp "$f" "$OUT/core/" 2>/dev/null
+done
+
+# ---- video-core fatal dumps (read-only: the firmware owns these files) ----
+# On a HW timeout the driver writes /var/log/vidc*.dat; TPM's video_fatal event then archives
+# them to /var/log/ana_dumps/ramdumps/ and deletes the originals.  Grab whichever still exists,
+# capped per file: the firmware dumps can be megabytes.
+mkdir "$OUT/vidc"
+for f in /var/log/ana_dumps/ramdumps/vidc* /var/log/vidc*.dat; do
+    [ -f "$f" ] || continue
+    sz=$(wc -c < "$f" 2>/dev/null)
+    case $sz in ''|*[!0-9]*) continue ;; esac
+    if [ "$sz" -gt 4194304 ]; then
+        dd if="$f" of="$OUT/vidc/${f##*/}" bs=4096 count=1024 2>/dev/null ||
+            echo "dd failed: $f" >> "$OUT/info.txt"
+    else
+        cp "$f" "$OUT/vidc/" 2>/dev/null || echo "copy failed: $f" >> "$OUT/info.txt"
+    fi
+done
+
+# ---- native navigation's own console (on the map SD; AppStartATF, DRController, PNavApp) ----
+# navStartup's start-up trace: "Report <run mode> back to ESO", StartupNaviSDK / StartupPresCon
+# and "Did not receive Start Response." - how long NavSDK start took and why it failed.
+# It only grows, so the newest lines.
+for c in sda0 sdb0; do
+    f=/fs/$c/console-navi.log
+    [ -f "$f" ] && tail -n 5000 "$f" > "$OUT/console-navi_$c.log" 2>/dev/null
 done
 
 sync

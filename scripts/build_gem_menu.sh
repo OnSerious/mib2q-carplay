@@ -23,6 +23,7 @@ ON_UNIT=/mnt/app/eso/hmi/engdefs/scripts/carplay
 BUTTONS="
 install|install|Install / update CarPlay (release on SD)
 logs|logs|Save logs to SD (+ verbose on)
+verbose|verbose|Verbose logging ON / OFF (toggle, survives reboot, default OFF)
 altscreen_on|altscreen_on|Cluster video (AltScreen) ON
 altscreen_off|altscreen_off|Cluster video (AltScreen) OFF
 rgd_enable|rgd_enable|Route guidance ON
