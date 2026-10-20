@@ -12,7 +12,7 @@
 #   - in-place runtime patches (per-unit / stock-dependent), done here:
 #       * smartphone_integrator.json  - replace the "carplay" child by path, and the
 #                                       "gal" (Android Auto) child when the release has it
-#       * dio_manager.json            - register the iAP2 route-guidance message IDs
+#       * dio_manager.json            - register every iAP2 message ID the hook relies on
 # No CRC gymnastics, no lock dir. Atomic renames. Upgrade-safe: a stock backup of
 # each edited config is kept once so uninstall restores the original.
 # Copyright (c) 2026 LuKa (@LuKa_dev)
@@ -165,7 +165,7 @@ patch_json() {
     fi
 }
 
-# ---- dio_manager.json: register the route-guidance message IDs ----------------
+# ---- dio_manager.json: register every iAP2 message ID the hook relies on ------
 # The Cinemo iAP2 SDK passes only listed messages. The hook's Identify patch makes
 # iOS offer route guidance but does not touch these lists. The file carries "##"
 # comment lines, so it is edited as text: IDs are appended before the list's "]".
@@ -178,13 +178,35 @@ add_ids() {   # $1 = line holding one list, rest = IDs; prints the new line
     done
     printf '%s\n' "$l"
 }
-# iAP2 messages the hook needs Cinemo to declare in Identify: route guidance
-# (0x52xx), telephony (0x415A InitiateCall for favorites without a number, 0x415B/0x415C/0x415D
-# AcceptCall/EndCall/SwapCalls, 0x415F/0x4160
-# Hold/MuteStatusUpdate, 0x4170/0x4171 ListUpdates) and vehicle status (0xA100/0xA102
-# Start/StopVehicleStatusUpdates from the phone, 0xA101 VehicleStatusUpdate from the hook).
-DIO_SENT_IDS="0x5200 0x5203 0x415A 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0xA101"
-DIO_RECV_IDS="0x5201 0x5202 0x5204 0x4171 0xA100 0xA102"
+del_ids() {   # $1 = line holding one list, rest = IDs that belong to the other list; prints the new line
+    l=$1; shift
+    for id in "$@"; do
+        q="\"$id\""
+        case $l in
+            *", $q"*) l=${l%%", $q"*}${l#*", $q"} ;;
+            *"$q, "*) l=${l%%"$q, "*}${l#*"$q, "} ;;
+            *"$q"*)   l=${l%%"$q"*}${l#*"$q"} ;;
+        esac
+    done
+    printf '%s
+' "$l"
+}
+# Every iAP2 message the hook relies on, stock ones included: each is added only when missing,
+# so a dio_manager.json that something else trimmed is repaired too; an ID found in the wrong
+# list is moved (0x5203 among the received IDs kept CarPlay from starting, issue #23).  iOS identifies a feature
+# only when every REQUIRED message of its group is declared, and rejects the group otherwise
+# (accessoryd 27.0 __checkIdentificationInfo.kMsg*List, same rule in 26.1); required = *:
+#   now playing (cover art)  sent 0x5000* 0x5002*          received 0x5001*
+#   power (phone battery)    sent 0xAE00* 0xAE02*          received 0xAE01*
+#   location (PASCD)         sent 0xFFFB*                  received 0xFFFA* 0xFFFC*
+#   call state / comms       sent 0x4154* 0x4157*          received 0x4155* 0x4158*
+#   call control             sent 0x415A 0x415B 0x415C 0x415D 0x415F 0x4160
+#                            (InitiateCall for favorites without a number, Accept/End/Swap/Hold/Mute)
+#   list updates             sent 0x4170*                  received 0x4171*
+#   route guidance           sent 0x5200* 0x5203*          received 0x5201* 0x5202* 0x5204
+#   vehicle status           sent 0xA101*                  received 0xA100* 0xA102*
+DIO_SENT_IDS="0x5000 0x5002 0xAE00 0xAE02 0xFFFB 0x4154 0x4157 0x415A 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0x5200 0x5203 0xA101"
+DIO_RECV_IDS="0x5001 0xAE01 0xFFFA 0xFFFC 0x4155 0x4158 0x4171 0x5201 0x5202 0x5204 0xA100 0xA102"
 # "nmea":"0xNNNN" is the NMEA bitmask dio advertises in Identify (LocationInformationComponent).
 # Bit 0x08 = PASCD (VehicleSpeedData): the hook supplies the wheel-speed sentences.
 add_nmea_speed() {   # $1 = line; prints the new line
@@ -199,9 +221,9 @@ patch_dio() {
         case $line in
             *'##'*) new=$line ;;
             *'"MessagesSentByAccessory":['*']'*)
-                sent=$((sent+1)); new=$(add_ids "$line" $DIO_SENT_IDS) ;;
+                sent=$((sent+1)); new=$(add_ids "$(del_ids "$line" $DIO_RECV_IDS)" $DIO_SENT_IDS) ;;
             *'"MessagesReceivedFromDevice":['*']'*)
-                recv=$((recv+1)); new=$(add_ids "$line" $DIO_RECV_IDS) ;;
+                recv=$((recv+1)); new=$(add_ids "$(del_ids "$line" $DIO_SENT_IDS)" $DIO_RECV_IDS) ;;
             *'"nmea":"0x'*)
                 new=$(add_nmea_speed "$line") ;;
             *) new=$line ;;
@@ -217,7 +239,7 @@ patch_dio() {
     [ "$n" = "$want" ] || { echo "  WARN dio_manager.json: only $n/$want IDs after edit; left as-is"; rm -f "$tmp"; return 1; }
     if [ "$changed" = 0 ]; then echo "  dio_manager.json IDs already registered"; rm -f "$tmp"; return 0; fi
     backup_once "$DIO" "$DIO.carplay-stock" || { rm -f "$tmp"; return 1; }
-    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json route-guidance, telephony and vehicle IDs registered (nmea +PASCD)"
+    chmod 644 "$tmp"; mv -f "$tmp" "$DIO" && echo "  dio_manager.json: all hook message IDs registered (nmea +PASCD)"
 }
 
 echo "custom.sh: CarPlay $ACTION"

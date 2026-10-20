@@ -52,7 +52,7 @@ Build the three compiled outputs first (`build_hook.sh`, `build_renderers.sh`, `
 ```mermaid
 flowchart TB
   accTitle: Repo folders to on-unit paths
-  accDescr: The build, renderer resources and deploy folders are staged into mod/carplay on the SD card; custom.sh copies the root tree onto the unit, splices the SI child and registers the route-guidance IDs in dio_manager.json.
+  accDescr: The build, renderer resources and deploy folders are staged into mod/carplay on the SD card; custom.sh copies the root tree onto the unit, splices the SI child and registers the hook message IDs in dio_manager.json.
 
   subgraph repo_side [Repo]
     build_dir["build/ hook, renderer, jar"]
@@ -168,7 +168,7 @@ M.I.B. prints "Nothing to do!". If the script is started on the RCC it hands its
 3. deletes M.I.B.'s `NavActiveIgnore.jar` / `navignore_*.jar` if present (see [Traps](#-traps));
 4. replaces the `"carplay"` child of `smartphone_integrator.json` with `carplay_child.json`, keeping
    the trailing comma, and refuses to write if the child count would change;
-5. registers the route-guidance IDs in `dio_manager.json` (see
+5. registers every hook message ID in `dio_manager.json` (see
    [Route-guidance message IDs](#-route-guidance-message-ids));
 6. runs `sync` and prints `DONE (install). Reboot the HU to load.`
 
@@ -345,9 +345,17 @@ Route guidance needs **two** things; the install provides the second:
 | `MessagesSentByAccessory` | `0x5200`, `0x5203` | StartRouteGuidanceUpdates, StopRouteGuidanceUpdates |
 | `MessagesReceivedFromDevice` | `0x5201`, `0x5202`, `0x5204` | RouteGuidanceUpdate, RouteGuidanceManeuverUpdate, LaneGuidanceInformation |
 
-**In the installer**, `patch_dio()` does this in plain ksh: it reads the file line by line, appends each
+**In the installer**, `patch_dio()` registers every message ID the hook relies on, not only the
+route-guidance ones above. iOS identifies a feature only when every required message of its group is
+declared and rejects the group otherwise, so the stock groups are covered too (now playing, power,
+location, call state, communications, list updates), along with call control and vehicle status. Each
+ID is added only when missing, so a file that something else trimmed gets repaired. An ID found in the
+wrong list is moved to the right one: `0x5203` among the received IDs kept CarPlay from starting
+(issue #23). The full list is in `DIO_SENT_IDS` / `DIO_RECV_IDS` in `custom.sh`.
+
+It does this in plain ksh: it reads the file line by line, appends each
 missing ID before the list's closing `]`, leaves `##` lines alone, refuses to write unless it found
-exactly one of each list and all five IDs are present afterwards, backs up the stock file once as
+exactly one of each list and all IDs are present afterwards, backs up the stock file once as
 `dio_manager.json.carplay-stock` and swaps the result in with an atomic rename. Re-running it is a
 no-op. `scripts/test_install_dio.sh` (part of `scripts/run_tests.sh`) checks all of that under ksh,
 dash and sh.

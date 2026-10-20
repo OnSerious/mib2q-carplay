@@ -85,9 +85,12 @@ control, the long press Siri. Test: `tests/SiriShortPressTest.java`.
 
 ## ⚙️ Install
 
-The installer adds the message IDs to `dio_manager.json` (`patch_dio`): sent `0x415A 0x415B 0x415C 0x415D
-0x415F 0x4160 0x4170 0xA101`, received `0x4171 0xA100 0xA102`, and sets the PASCD bit 0x08 in
-`"nmea"`. A unit installed with 1.1 needs the installer run again; it only adds what is missing.
+The installer adds the message IDs to `dio_manager.json` (`patch_dio`): for telephony and vehicle data,
+sent `0x4154 0x4157 0x415A 0x415B 0x415C 0x415D 0x415F 0x4160 0x4170 0xA101 0xFFFB`, received
+`0x4155 0x4158 0x4171 0xA100 0xA102 0xFFFA 0xFFFC`, and it sets the PASCD bit 0x08 in `"nmea"`. iOS rejects a
+feature group unless every required message of it is declared, so the stock IDs of each group are
+re-added too when something else trimmed them, and an ID found in the wrong list is moved (upstream
+61897b5, 1a7bc73). A unit installed with 1.1 needs the installer run again; it only adds what is missing.
 
 ## 🧪 Tests
 
