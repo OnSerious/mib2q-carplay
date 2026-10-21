@@ -31,7 +31,7 @@ rgd_disable|rgd_disable|Route guidance OFF
 grid|grid|Calibration grid ON / OFF (toggle)
 safearea|safearea|Apply SafeArea from SD (carplay_safearea*.conf)
 safearea_reset|safearea_reset|Reset SafeArea to built-in
-singleview|singleview|Classic-view SafeArea ON / OFF (2 ViewAreas)
+singleview|singleview|Small-map SafeAreas ON / OFF (3 ViewAreas)
 reacquire|reacquire|Re-request cluster map (test app switching)
 hwdec|hwdec|HW decoder ON / OFF (toggle, default ON)
 hwdelay|hwdelay|HW decoder 2-min delayed start ON / OFF (toggle, CarPlay, default OFF)

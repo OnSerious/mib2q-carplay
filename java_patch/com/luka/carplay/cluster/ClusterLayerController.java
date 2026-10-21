@@ -321,7 +321,7 @@ public final class ClusterLayerController {
             /* Android Auto: the gal hook reads the layout from a file (no bus peer). */
             com.luka.carplay.aa.AaClusterView.publish(popup, geometry.layoutName);
         } else {
-            sendAltViewArea(videoActive, popup);
+            sendAltViewArea(videoActive, popup, geometry.smallStageDX != 0);
         }
         try {
             /* Applied on every path below, including the early returns. */
@@ -380,16 +380,20 @@ public final class ClusterLayerController {
 
     /** CarPlay cluster video only: tell the hook which VC layout is showing so iOS keeps
      *  the puck inside the visible map (ViewArea 0 = wide map, 1 = classic small window
-     *  between the dials). VC FctID 54 drives {@code popup}: large map = wide. Serialized
-     *  by APPLY_LOCK; re-sent for every new video session. */
-    private static void sendAltViewArea(boolean videoActive, boolean popup) {
+     *  between the dials, 2 = Sport small map left of the rev counter). VC FctID 54 drives
+     *  {@code popup}: large map = wide. A small-stage offset (Sport: -476) shifts plane 99
+     *  in the small map, so that skin needs its own SafeArea. Serialized by APPLY_LOCK;
+     *  re-sent for every new video session. */
+    private static void sendAltViewArea(boolean videoActive, boolean popup, boolean shiftedSmallMap) {
         if (!videoActive) { lastZoneSent = -1; return; }
-        int zone = popup ? 0 : 2;   /* CMD_ALT_ZONE mode: 0=full, 2=classic */
+        /* CMD_ALT_ZONE mode: 0=full, 1=sport, 2=classic */
+        int zone = popup ? 0 : (shiftedSmallMap ? 1 : 2);
         if (zone == lastZoneSent) return;
         boolean sent = com.luka.carplay.bus.CarplayBus.getInstance().sendBinary(
             com.luka.carplay.bus.CarplayBus.CMD_ALT_ZONE, new byte[]{(byte) zone, 0, 0});
         if (sent) lastZoneSent = zone;
-        Log.i("ClusterLayers", "AltScreen view area -> " + (popup ? "wide (0)" : "classic (1)")
+        Log.i("ClusterLayers", "AltScreen view area -> "
+            + (zone == 0 ? "wide (0)" : zone == 1 ? "sport (2)" : "classic (1)")
             + (sent ? "" : " (bus send dropped, retried on the next change)"));
     }
 

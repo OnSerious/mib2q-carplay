@@ -15,7 +15,8 @@ byte-patched. Roller zoom works.
 
 Built on top of that and still *car test pending*: the phone drawing maneuver and ETA
 (v1156), SafeArea 270 (v1158), and re-rendering the map on a wide/classic cockpit switch
-(v1160 back-channel). The release image v1162 includes all of these.
+(v1160 back-channel). The release image v1164 includes all of these, plus the Sport-skin
+ViewArea, 300 px small-map SafeAreas and the initial URL without `maneuverLayout` (issue #20).
 
 ```
 iPhone ==Wi-Fi AirPlay==> HW301 (receiver: libAirPlay) ==USB CarPlay==> MHI2Q
@@ -167,13 +168,20 @@ of frames, `nal_ok=1 bad=0`):
 
 ## Cluster content and layout
 
-- `initialURL` = `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no`.
-  With it the phone draws maneuver and ETA. The bare `/map` URL is the "head unit draws RGI" variant.
+- `initialURL` = `maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no`.
+  With it the phone draws maneuver and ETA. No `maneuverLayout`: `rightAligned` pushed the puck left
+  of the card (issue #20), same as the head-unit hook's RGI-off URL. The bare `/map` URL is the "head unit draws RGI" variant.
   Change it with `-DCLUSTER_URL_INITIAL=...`.
 - On the dongle path the **dongle** advertises the URL; the head unit serves stock `/info`. The
   MIB-menu maneuver toggle therefore has no effect on the dongle path.
-- SafeArea for this A5 cockpit: height **270** (297 was wrong). Wide = 360,87,720,270 and
-  classic = 520,87,400,270. Geometry can be overridden: `CLUSTER_W/H/FPS/WMM/HMM`, `CLUSTER_SAFE0_*` / `SAFE1_*`.
+- SafeArea for this A5 cockpit: height **270** (297 was wrong). Wide = 360,87,720,270,
+  classic = 520,64,400,300 and Sport skin small map = 566,64,360,300 (*car test pending*). The
+  small maps are 300 tall so third-party apps keep their turn card; Sport is mib2q-carplay-rgi's
+  calibrated rect in our shifted canvas.
+  The order must match the hook's ViewArea indices (0 wide, 1 classic, 2 sport): the VIEW
+  back-channel carries only the index. Geometry can be overridden: `CLUSTER_W/H/FPS/WMM/HMM`,
+  `CLUSTER_SAFE0_*` / `SAFE1_*` / `SAFE2_*`; the head unit's `mibr-carplay111-safearea*.conf` files
+  do not reach the dongle.
 - Cockpit switch: CPAAProxyEx drops `updateViewArea`, `showUI` and similar head-unit commands
   (`_ProcessProxyRequestCommand` knows only `disableBluetooth`, `requestUI`, `changeModes`,
   `forceKeyFrame`, `setLimitedUI`). The head-unit hook instead writes `"VIEW"` plus a u32 LE view
@@ -196,7 +204,8 @@ of frames, `nal_ok=1 bad=0`):
 | 1156 | maneuver/ETA URL, desync recovery, backpressure | |
 | 1158 | SafeArea 270 | |
 | 1160 | **same version as v1162, also contains enabled logging** (`build_dual.sh optA`, `CLUSTER_DIAG=1`, `v1160-20261021065350`). It first added the cockpit-switch back-channel and was rebuilt 2026-10-21 from the v1162 source; the first v1160 predated the review fixes | archived `fw/hw301_v1160.tar` |
-| **1162** | release = same source with diagnostics off (`build_dual.sh release`, `v1162-20261020152434`) | archived `fw/hw301_v1162.tar` |
+| 1162 | previous release = same source as 1160 with diagnostics off (`v1162-20261020152434`) | archived `fw/hw301_v1162.tar` |
+| **1164** | release: third ViewArea (Sport skin small map 566,64,360,300), classic 520,64,400,300, `initialURL` without `maneuverLayout=rightAligned` (`build_dual.sh release`, `v1164-20261021080230`). *Car test pending* | archived `fw/hw301_v1164.tar` |
 
 ## Open items
 

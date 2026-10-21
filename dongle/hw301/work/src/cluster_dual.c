@@ -155,19 +155,23 @@
 /* The INITIAL URL decides what the phone renders into the cluster video. The
  * bare URL gives a plain map with no maneuver/ETA (the arrow was missing). The
  * head-unit hook uses showETA + maneuverLayout for a real iPhone, which makes
- * the phone draw the turn card and ETA into the cluster itself. Match that.
- * Override with -DCLUSTER_URL_INITIAL=... (e.g. the RGI-on bare /map when the
+ * the phone draw the turn card and ETA into the cluster itself. Match that,
+ * without maneuverLayout: rightAligned pinned the card to the SafeArea's right
+ * edge and the app moved the puck left of it (issue #20; on the Sport skin the
+ * card also went behind the rev counter). Override with -DCLUSTER_URL_INITIAL=... (e.g. the RGI-on bare /map when the
  * head unit draws its own maneuver). */
 #ifndef CLUSTER_URL_INITIAL
-#define CLUSTER_URL_INITIAL "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
+#define CLUSTER_URL_INITIAL "maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no"
 #endif
 #define URL_CLUSTER "maps:/car/instrumentcluster"
 #define URL_MAP "maps:/car/instrumentcluster/map"
 #define URL_CARD "maps:/car/instrumentcluster/instructioncard"
 
 /* SafeArea per view, matching the head-unit hook's calibrated A5 values
- * (ALT111_DEFAULT_SAFE_* wide, _SMALL_SAFE_* classic). Height is 270, not the
- * canvas 540: the dials cover the rest. Overridable per cockpit at build time. */
+ * (ALT111_DEFAULT_SAFE_* wide, _SMALL_SAFE_* classic, _SPORT_SAFE_* Sport skin
+ * small map). Wide height is 270, not the canvas 540: the dials cover the rest.
+ * The small maps are 300 tall (rows 64..364): narrower than ~498 px, iOS needs
+ * that height or it hides third-party apps' turn card and ETA. Overridable per cockpit at build time. */
 #ifndef CLUSTER_SAFE0_X
 #define CLUSTER_SAFE0_X 360
 #endif
@@ -184,13 +188,25 @@
 #define CLUSTER_SAFE1_X 520
 #endif
 #ifndef CLUSTER_SAFE1_Y
-#define CLUSTER_SAFE1_Y 87
+#define CLUSTER_SAFE1_Y 64
 #endif
 #ifndef CLUSTER_SAFE1_W
 #define CLUSTER_SAFE1_W 400
 #endif
 #ifndef CLUSTER_SAFE1_H
-#define CLUSTER_SAFE1_H 270
+#define CLUSTER_SAFE1_H 300
+#endif
+#ifndef CLUSTER_SAFE2_X
+#define CLUSTER_SAFE2_X 566
+#endif
+#ifndef CLUSTER_SAFE2_Y
+#define CLUSTER_SAFE2_Y 64
+#endif
+#ifndef CLUSTER_SAFE2_W
+#define CLUSTER_SAFE2_W 360
+#endif
+#ifndef CLUSTER_SAFE2_H
+#define CLUSTER_SAFE2_H 300
 #endif
 
 #define OFF_FILE "/mnt/UDISK/cluster_dual.off"
@@ -210,7 +226,7 @@
 #define HU_RETRY_S 5             /* pre-connect retry interval */
 #define HU_MAX_TRIES 12          /* per head-unit key generation (~1 min) */
 #define HU_WRITE_MS 60           /* max per-frame wait for the head-unit socket; else drop */
-#define VIEW_COUNT 2             /* advertised ViewAreas (wide, classic) */
+#define VIEW_COUNT 3             /* advertised ViewAreas (wide, classic, sport) */
 #define BC_MAGIC "VIEW"          /* head-unit -> dongle back-channel: "VIEW" + u32 LE index */
 #define SPSSI_SIZE 0x2b8         /* SetupProxyScreenSecurityInfo span, v129 */
 
@@ -589,10 +605,13 @@ static void add_views(CFRef alt) {
     if (!areas) return;
     /* SafeArea = where the phone keeps the puck/turn card so the dials do not
      * cover them. These must match the head-unit hook's calibrated values for
-     * this cockpit (ALT111_DEFAULT_SAFE_* / _SMALL_SAFE_*); the dongle advertised
+     * this cockpit (ALT111_DEFAULT_SAFE_* / _SMALL_SAFE_* / _SPORT_SAFE_*), in the
+     * same order as the hook's ViewArea indices (the VIEW back-channel sends
+     * the index only); the dongle advertised
      * height 297 vs the real 270, so content landed too low/wide (car photo). */
     add_view(areas, CLUSTER_SAFE0_X, CLUSTER_SAFE0_Y, CLUSTER_SAFE0_W, CLUSTER_SAFE0_H); /* [0] wide */
     add_view(areas, CLUSTER_SAFE1_X, CLUSTER_SAFE1_Y, CLUSTER_SAFE1_W, CLUSTER_SAFE1_H); /* [1] classic */
+    add_view(areas, CLUSTER_SAFE2_X, CLUSTER_SAFE2_Y, CLUSTER_SAFE2_W, CLUSTER_SAFE2_H); /* [2] sport */
     set_value(alt, "viewAreas", areas);
     set_i64(alt, "initialViewArea", 0);
     cf_release(areas);

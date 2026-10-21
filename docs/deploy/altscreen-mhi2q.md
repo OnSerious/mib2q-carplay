@@ -90,14 +90,22 @@ them when present, `carplay_startup.sh` preloads the hook beside `libcarplay_hoo
 ## 3. SafeArea and ViewAreas
 
 iOS draws the map over the whole 1440×540 canvas but keeps the puck and its overlays inside the
-**SafeArea**. The hook advertises two full-canvas ViewAreas that differ only in SafeArea:
+**SafeArea**. The hook advertises three full-canvas ViewAreas that differ only in SafeArea:
 
 | index | VC layout | built-in SafeArea | override file |
 | --- | --- | --- | --- |
 | 0 | wide map (small dials) | x=360 y=87 w=720 h=270 | `/mnt/app/root/mibr-carplay111-safearea.conf` |
-| 1 | classic small map (big dials) | x=520 y=87 w=400 h=270 | `/mnt/app/root/mibr-carplay111-safearea-small.conf` |
+| 1 | classic small map (big dials) | x=520 y=64 w=400 h=300 | `/mnt/app/root/mibr-carplay111-safearea-small.conf` |
+| 2 | Sport skin small map (left of the rev counter) | x=566 y=64 w=360 h=300 | `/mnt/app/root/mibr-carplay111-safearea-sport.conf` |
 
-VC FctID 54 (`largeMapView`) selects the view: Java sends `CMD_ALT_ZONE`, `hook/altzoom` calls
+VC FctID 54 (`largeMapView`) selects wide vs small; for the small map the stock layout's small-stage
+offset picks classic (0) or sport (`LayoutMIB2HighB9Sport`, -476): that offset shifts plane 99, so the
+classic rect would land at panel x 44..444 on Sport while its map runs to the rev counter at ~600
+(issue #20). The sport rect is mib2q-carplay-rgi's grid-calibrated panel (90,90) 360x300 moved by
+(+476, -26) into our canvas, *car test pending*. Both small maps are 300 tall: iOS treats a SafeArea
+narrower than ~498 px as narrow and then hides third-party apps' turn card and ETA unless
+0.3 x height exceeds ~87 px (270 did not).
+Java sends `CMD_ALT_ZONE` (0=full, 1=sport, 2=classic), `hook/altzoom` calls
 `altscreen111_view_area()`, and the control worker sends `updateViewArea` (which **must** carry
 `adjacentViewAreas`, or iOS acknowledges but keeps the old layout) until the phone acknowledges.
 The current view is also the `initialViewArea` of the next `/info`.
@@ -105,12 +113,12 @@ The current view is also the `initialViewArea` of the next `/info`.
 Calibration from the GEM **CarPlay-RGI** page:
 
 1. *Calibration grid ON / OFF* — ruler over the video, lines every 60 px.
-2. Put `x=`/`y=`/`w=`/`h=` in `carplay_safearea.conf` and/or `carplay_safearea_small.conf` in the
-   card root, press *Apply SafeArea from SD*, reconnect.
-3. *Reset SafeArea to built-in* returns to the table above. *Classic-view SafeArea ON / OFF*
+2. Put `x=`/`y=`/`w=`/`h=` in `carplay_safearea.conf`, `carplay_safearea_small.conf` and/or
+   `carplay_safearea_sport.conf` in the card root, press *Apply SafeArea from SD*, reconnect.
+3. *Reset SafeArea to built-in* returns to the table above. *Small-map SafeAreas ON / OFF*
    falls back to a single ViewArea.
 
-The hook logs what it advertised: `GEN2 ViewArea[n] wide|classic area=... safe=...` and
+The hook logs what it advertised: `GEN2 ViewArea[n] wide|classic|sport area=... safe=...` and
 `gen2 view area -> n`.
 
 > [!WARNING]
@@ -168,7 +176,11 @@ hook's hello); `libcarplay_hook` hands it to `altscreen111_set_rgi`, which re-se
 | route guidance | URL | why |
 | --- | --- | --- |
 | on (our BAP/KDK arrow) | `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no` | Maps' own turn card and ETA would show twice; the root URL keeps them even with `showETA=no` |
-| off (Waze, no route) | `maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no` | the app's own turn card and ETA are the only guidance on the cluster |
+| off (Waze, no route) | `maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no` | the app's own turn card and ETA are the only guidance on the cluster |
+
+The off URL carries no `maneuverLayout`: 1.2's `rightAligned` pinned the app's card to the SafeArea's
+right edge and the app moved the puck left of it (issue #20; on the Sport skin the card also sat
+behind the rev counter). `mibr-carplay111-nav.maneuverLayout` (`left`, `right`, `top`) adds one back.
 
 Every existing URL override wins (`/tmp/mibr-alt111-url-mode`, `mibr-carplay111-nav.surface`,
 `mibr-carplay111-url-map.enabled`, `mibr-carplay111-nav-query.enabled`, `ALTSCREEN111_PARITY_URL`).

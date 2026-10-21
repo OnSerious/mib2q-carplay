@@ -77,7 +77,9 @@ built against your own unit's HMI, but cluster geometry may need calibration.
 | --- | --- | --- |
 | `MHI2Q_ER_AUG22_P5152` | Audi A5 (F5), MU1329 | development unit; all features tested |
 | `MHI2Q_ER_AUG22_P5092` | MU1329 | wireless CarPlay tested, [report](https://github.com/kamgurgul/mib2q-carplay/issues/5) |
+| `MHI2Q_ER_AUG22_P5092` | Audi A4 (B9, 2019), MU1329 | wireless CarPlay and Android Auto via AAWireless TWO+, AltScreen and Android Auto cluster maps, wide/classic layouts, wheel map zoom, [report](https://github.com/kamgurgul/mib2q-carplay/issues/26) |
 | `MHI2Q_US_AUG22_P5087` | Audi A5 Sportback (B9, US, 2018), MU1316 | release 1.1, wired CarPlay, Apple Maps on the Virtual Cockpit, [report](https://github.com/kamgurgul/mib2q-carplay/issues/21) |
+| `MHI2Q_US_AUG22_P5087` | Audi Q7 (4M, US, 2018), MU1316 | release 1.2, wired CarPlay, Siri on short press, Waze guidance on the cluster (Waze map zoom does not resize), [report](https://github.com/kamgurgul/mib2q-carplay/issues/27) |
 
 ## Tested wireless adapters
 
@@ -88,13 +90,14 @@ without any of these.
 | --- | --- | --- | --- |
 | Baseus Safe Journey Series Wireless CarPlay Adapter | build `26031311.2705.1` | fast | yes, no custom firmware, [report](https://github.com/kamgurgul/mib2q-carplay/issues/5) |
 | Carlinkit 5.0 / 2Air | software `2025.12.29.1746`, hardware `U2AC822C0` | slow, then stable | yes, no custom firmware, [report](https://github.com/kamgurgul/mib2q-carplay/issues/5) |
-| HW301 (Allwinner, setup Wi-Fi `smartBox`, web UI `192.168.5.1`) | custom app image **v1162** (`v1162-20261020152434`) | same as stock HW301 | yes, **from release 1.3**, only with that image plus the 1.3 head-unit install. Stock v1.26 / v1.29 stay on the main screen. [How to flash](docs/deploy/hw301-dongle.md) |
+| HW301 (Allwinner, setup Wi-Fi `smartBox`, web UI `192.168.5.1`) | custom app image **v1164** (`v1164-20261021080230`) | same as stock HW301 | yes, **from release 1.3**, only with that image plus the 1.3 head-unit install. Stock v1.26 / v1.29 stay on the main screen. [How to flash](docs/deploy/hw301-dongle.md) |
+| AAWireless TWO+ | manufacturer custom test build; public firmware pending | fast | yes, CarPlay AltScreen and Android Auto, tested on P5092 / MU1329; current public firmware has no cluster map until the fix ships, [report](https://github.com/kamgurgul/mib2q-carplay/issues/26) |
 
 An HW301 on stock firmware tells the head unit it is an iPhone 7 (`iPhone9,1` / `18D70`)
-and never opens the cluster stream, so the cockpit keeps the Audi map. The v1162 image
+and never opens the cluster stream, so the cockpit keeps the Audi map. The v1164 image
 keeps that main screen and adds the cluster stream; it needs mib2q-carplay **1.3** or newer
 on the head unit. Other `smartBox-xxxx` boards are not this image; do not flash
-`hw301_v1162.tar` onto them.
+`hw301_v1164.tar` onto them.
 
 ## Requirements
 
@@ -258,9 +261,9 @@ Its buttons run byte-identical copies of the M.I.B. mods, stored on the unit in
 | Cluster video (AltScreen) ON / OFF | AltScreen advertisement on/off (next phone connect) | no |
 | Route guidance ON / OFF | turn route guidance on/off at runtime | no |
 | Calibration grid ON / OFF | toggle the calibration grid over the cluster video | no |
-| Apply SafeArea from SD | apply `carplay_safearea.conf` (wide VC map) and/or `carplay_safearea_small.conf` (classic small map) from the card root | yes |
+| Apply SafeArea from SD | apply `carplay_safearea.conf` (wide VC map), `carplay_safearea_small.conf` (classic small map) and/or `carplay_safearea_sport.conf` (Sport skin small map) from the card root | yes |
 | Reset SafeArea to built-in | drop both custom SafeAreas | no |
-| Classic-view SafeArea ON / OFF | toggle between two ViewAreas (wide + classic) and a single wide one (next CarPlay connect) | no |
+| Small-map SafeAreas ON / OFF | toggle between three ViewAreas (wide + classic + sport) and a single wide one (next CarPlay connect) | no |
 | Re-request cluster map | re-send the cluster request in the running session so iOS picks the map app again (test) | no |
 | HW decoder ON / OFF | toggle hardware H.264 decode for the cluster video (default ON; next CarPlay connect) | no |
 | HW decoder 2-min delayed start ON / OFF | CarPlay decodes in software for the first 2 minutes after an MMI start, then switches to hardware (default OFF: hardware at once). Turn on if the MMI freezes when CarPlay connects right after a start | no |

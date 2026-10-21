@@ -26,7 +26,7 @@ else md5 -q "$img" | tr -d '\n' | sed 's/$/\n/' > "$md5f"; fi
 # app partition (GPT on the SPI-NOR, 0x7e0000-0xea0000) must hold this image.
 # A larger image would run into UDISK, so refuse to pack it.
 part=$((0x6c0000))
-now=$(stat -f%z "$img")
+now=$(wc -c < "$img" | tr -d ' ')               # portable: BSD stat -f%z vs GNU stat -c%s
 echo "app.img  = $now bytes  (app partition = $part)"
 [ "$now" -le "$part" ] || { echo "ERROR: image larger than the app partition; not packing"; exit 1; }
 

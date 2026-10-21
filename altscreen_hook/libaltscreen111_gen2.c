@@ -139,11 +139,32 @@
  * just under the top bar - matching the 420x330 Audi window of the recovered
  * reference. Canvas rows = panel rows - 26 (plane 99 origin). Override with
  * /mnt/app/root/mibr-carplay111-safearea-small.conf.
+ *
+ * Height 300, rows 64..364 = panel 90..390 (mib2q-carplay-rgi's grid-calibrated
+ * small-map rows, above the VC map bar at ~390). CarPlaySupport's cluster card
+ * layout treats a SafeArea narrower than ~498 px as narrow and then needs
+ * 0.3 * height > ~87 px; at 270 it logs "Undefined layout (0)" and hides the
+ * turn card and ETA of third-party apps.
  */
 #define ALT111_DEFAULT_SMALL_SAFE_X 520
-#define ALT111_DEFAULT_SMALL_SAFE_Y 87
+#define ALT111_DEFAULT_SMALL_SAFE_Y 64
 #define ALT111_DEFAULT_SMALL_SAFE_W 400
-#define ALT111_DEFAULT_SMALL_SAFE_H 270   /* same bottom edge as the wide view */
+#define ALT111_DEFAULT_SMALL_SAFE_H 300
+/*
+ * Third ViewArea: the Sport skin's small map (LayoutMIB2HighB9Sport, big central
+ * rev counter, map left of it). Stock shifts the map planes - and so plane 99 - by
+ * the layout's small-stage offset (-476,0), which Classic does not have, so the
+ * classic rect above lands at panel x 44..444 there while the visible map runs
+ * from ~100 to the rev counter at ~600 (issue #20 photos: puck too far left).
+ * Canvas = panel + (476, -26). mib2q-carplay-rgi, whose plane 99 does not move,
+ * calibrated this map with a grid at panel (90,90) 360x300 (cells B2..E5); same
+ * 300 height rule as the classic rect. Override with
+ * /mnt/app/root/mibr-carplay111-safearea-sport.conf.
+ */
+#define ALT111_DEFAULT_SPORT_SAFE_X 566
+#define ALT111_DEFAULT_SPORT_SAFE_Y 64
+#define ALT111_DEFAULT_SPORT_SAFE_W 360
+#define ALT111_DEFAULT_SPORT_SAFE_H 300
 #else
 #define ALT111_TARGET_NAME "mu1440"
 #define ALT111_DEFAULT_PORT 6031
@@ -186,10 +207,13 @@ typedef void *AirPlayReceiverSessionRef;
  * car-verified there).  RGI on: our BAP/KDK path draws the maneuver, ETA and lanes,
  * so ask for the bare map; the root URL is "anyContent" and Maps kept its turn card
  * there even with showETA=no.  RGI off (Waze, or no route): map plus the app's own
- * turn card and ETA, so guidance still reaches the cluster.
+ * turn card and ETA, so guidance still reaches the cluster.  No maneuverLayout there
+ * by default: rightAligned pinned the card to the SafeArea's right edge and the app
+ * moved the puck left of it (issue #20; on the Sport skin the card also went behind
+ * the rev counter).  mibr-carplay111-nav.maneuverLayout still picks one explicitly.
  */
 #define ALT_URL_RGI_ON   "maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no"
-#define ALT_URL_RGI_OFF  "maps:/car/instrumentcluster?showETA=yes&maneuverLayout=rightAligned&showSpeedLimit=no"
+#define ALT_URL_RGI_OFF  "maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no"
 #define AIRPLAY_FEATURE_BIT26 (1ULL << 26)
 
 /* Opaque storage. Stock AES_CTR_Context is smaller than this on the target. */
@@ -752,21 +776,32 @@ static int read_trimmed_value(const char *path, char *out, size_t cap)
 }
 
 static const char *g_safearea_small_config_path = "/mnt/app/root/mibr-carplay111-safearea-small.conf";
+static const char *g_safearea_sport_config_path = "/mnt/app/root/mibr-carplay111-safearea-sport.conf";
 
-/* view 0 = full/wide VC map, view 1 = classic small map window. */
+static const char *view_area_name(int view)
+{
+    return view == 2 ? "sport" : (view ? "classic" : "wide");
+}
+
+/* view 0 = full/wide VC map, view 1 = classic small map window,
+ * view 2 = Sport skin small map (left of the rev counter). */
 static void load_safearea_config(int view, int *x, int *y, int *w, int *h)
 {
     char b[192];
     int fd, n;
     int tx=0, ty=0, tw=g_width, th=g_height;
-    const char *path = view ? g_safearea_small_config_path : g_safearea_config_path;
+    const char *path = view == 2 ? g_safearea_sport_config_path
+                     : (view ? g_safearea_small_config_path : g_safearea_config_path);
 
     if(!x||!y||!w||!h) return;
     *x=0; *y=0; *w=g_width; *h=g_height;
 #ifdef ALT111_DEFAULT_SAFE_W
     /* Built-in default only while the canvas is the one it was measured on. */
     if(g_width==ALT111_DEFAULT_WIDTH && g_height==ALT111_DEFAULT_HEIGHT){
-        if(view){
+        if(view==2){
+            *x=ALT111_DEFAULT_SPORT_SAFE_X; *y=ALT111_DEFAULT_SPORT_SAFE_Y;
+            *w=ALT111_DEFAULT_SPORT_SAFE_W; *h=ALT111_DEFAULT_SPORT_SAFE_H;
+        }else if(view){
             *x=ALT111_DEFAULT_SMALL_SAFE_X; *y=ALT111_DEFAULT_SMALL_SAFE_Y;
             *w=ALT111_DEFAULT_SMALL_SAFE_W; *h=ALT111_DEFAULT_SMALL_SAFE_H;
         }else{
@@ -905,7 +940,15 @@ static void active_alt_url_copy(char *out, size_t cap)
     if (!out || cap == 0u) return;
     out[0] = '\0';
     if (rgi_url_policy_applies()) {
-        snprintf(out, cap, "%s", g2_rgi_on ? ALT_URL_RGI_ON : ALT_URL_RGI_OFF);
+        if (g2_rgi_on) {
+            snprintf(out, cap, "%s", ALT_URL_RGI_ON);
+            return;
+        }
+        nav_maneuver_value(maneuver, sizeof(maneuver));
+        if (maneuver[0])
+            snprintf(out, cap, "%s&maneuverLayout=%s", ALT_URL_RGI_OFF, maneuver);
+        else
+            snprintf(out, cap, "%s", ALT_URL_RGI_OFF);
         return;
     }
     base = nav_surface_url(surface, sizeof(surface));
@@ -2438,9 +2481,10 @@ done:
  * once the full-width and classic VC layouts have been measured on-car.
  */
 /*
- * ViewAreas advertised: 2 on MHI2Q (0 = wide VC map, 1 = classic small map),
- * switched in-session with updateViewArea from the VC's FctID 54 large/small map
- * report (Java -> CMD_ALT_ZONE -> altscreen111_view_area).
+ * ViewAreas advertised: 3 on MHI2Q (0 = wide VC map, 1 = classic small map,
+ * 2 = Sport skin small map), switched in-session with updateViewArea from the
+ * VC's FctID 54 large/small map report and the stock layout's small-stage offset
+ * (Java -> CMD_ALT_ZONE -> altscreen111_view_area).
  * Both views are the full canvas and differ in SafeArea only; the switch takes
  * effect because updateViewArea carries adjacentViewAreas (see
  * command_update_view). A smaller view-1 rect was tried (log set 015) and is
@@ -2454,7 +2498,7 @@ static volatile int g_desired_view;
 static int configured_view_count(void)
 {
 #ifdef ALT111_DEFAULT_SMALL_SAFE_W
-    return access(g_single_view_marker,F_OK)==0 ? 1 : 2;
+    return access(g_single_view_marker,F_OK)==0 ? 1 : 3;
 #else
     return 1;
 #endif
@@ -2494,7 +2538,7 @@ static void add_reference_viewarea(CFMutableDictionaryRef alt)
         p_CFArrayAppendValue(areas,view);
         p_CFRelease(safe);
         p_CFRelease(view);
-        logf_u2("GEN2 ViewArea[%d] %s area=%dx%d@%d,%d safe=%dx%d@%d,%d",v,v?"classic":"wide",
+        logf_u2("GEN2 ViewArea[%d] %s area=%dx%d@%d,%d safe=%dx%d@%d,%d",v,view_area_name(v),
                 area_w,area_h,area_x,area_y,safe_w,safe_h,safe_x,safe_y);
     }
     k=s_cf("viewAreas");
@@ -3056,7 +3100,8 @@ static void gen2_dispatch_diag_command(const char *label, CFMutableDictionaryRef
 
 /*
  * Exported for libcarplay_hook's CMD_ALT_ZONE handler: the VC switched between
- * its wide map (0) and the classic small map window (1). Stored for the next
+ * its wide map (0), the classic small map window (1) and the Sport skin's small
+ * map (2). Stored for the next
  * /info (initialViewArea) and, with a stream-111 session up, handed to the
  * control core, whose worker sends updateViewArea until the phone acknowledges.
  */
@@ -3076,7 +3121,7 @@ int altscreen111_view_area(int view)
     }
     pthread_cond_broadcast(&g2_core_cv);
     pthread_mutex_unlock(&g2_core_lock);
-    logf_u2("gen2 view area -> %d (%s) %s rc=%d",view,view?"classic":"wide",
+    logf_u2("gen2 view area -> %d (%s) %s rc=%d",view,view_area_name(view),
             active?"updateViewArea queued":"for the next session",rc);
     return rc;
 }
@@ -4286,6 +4331,7 @@ OSStatus AES_CBCFrame_Init(void *ctx, const uint8_t key[16], const uint8_t iv[16
 
 static int gen2_configure_profile(void)
 {
+    int i;
     alt111_profile_mu1440(&g2_profile,0);
     if(g_width<=0 || g_height<=0 || g_width_mm<=0 || g_height_mm<=0 ||
        g_fps<=0 || g_fps>60){
@@ -4308,7 +4354,7 @@ static int gen2_configure_profile(void)
     g2_profile.views[0].safe=g2_profile.views[0].area;
     g_view_count=configured_view_count();
     g2_profile.view_count=(unsigned)g_view_count;
-    if(g_view_count>1) g2_profile.views[1]=g2_profile.views[0];
+    for(i=1; i<g_view_count; ++i) g2_profile.views[i]=g2_profile.views[0];
     if(alt111_profile_validate(&g2_profile)!=ALT111_OK){
         logf_u2("gen2 runtime profile validation failed");
         return -1;

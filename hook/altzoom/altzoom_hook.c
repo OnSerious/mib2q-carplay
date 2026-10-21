@@ -60,13 +60,14 @@ static void on_alt_zoom(uint16_t type, uint8_t flags, const uint8_t* payload,
 }
 
 /* CMD_ALT_ZONE [u8 mode 0=full/1=sport/2=classic][u16 LE ms]: the VC layout.
- * full = wide map -> ViewArea 0; sport/classic small map window -> ViewArea 1. */
+ * full = wide map -> ViewArea 0; classic small map window -> ViewArea 1;
+ * Sport skin small map (shifted left of the rev counter) -> ViewArea 2. */
 static void on_alt_zone(uint16_t type, uint8_t flags, const uint8_t* payload,
                         uint32_t len, void* ctx) {
     int view;
     (void)type; (void)flags; (void)ctx;
     if (!payload || len < 1) return;
-    view = payload[0] == 0 ? 0 : 1;
+    view = payload[0] == 0 ? 0 : (payload[0] == 1 ? 2 : 1);
     resolve();
     if (!g_view_area) {
         if (!g_missing_logged) {

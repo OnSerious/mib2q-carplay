@@ -8,7 +8,7 @@ tests but have not been driven yet.
 - **HW301 wireless dongle: the CarPlay map on the Virtual Cockpit.** The HW301 is the
   `smartBox-xxxx` dongle with the setup page at `192.168.5.1`. With its stock firmware
   (v1.26 / v1.29) it shows CarPlay on the MMI only. The custom app image
-  `dongle/hw301/fw/hw301_v1162.tar` (marker `v1162-20261020152434`) keeps that main screen and
+  `dongle/hw301/fw/hw301_v1164.tar` (marker `v1164-20261021080230`) keeps that main screen and
   adds a dedicated iPhone cluster view on the Virtual Cockpit. It is not a copy of the MMI screen.
   The roller zooms the map, and the phone draws the turn card and ETA.
   - Requires this release on the head unit, with **Cluster video ON**. The head-unit hook now
@@ -20,9 +20,17 @@ tests but have not been driven yet.
 
   Map, MMI and zoom were tested in the car with v1154. Turn card and ETA, the corrected safe
   area and layout switching came in later builds and are *car test pending*.
-- **Cockpit layout switch resizes the dongle's cluster map.** Switching wide and classic sends
-  the new view to the iPhone through the dongle, which the stock dongle cannot forward.
-  *Car test pending.*
+- **Cockpit layout switch resizes the dongle's cluster map.** Switching wide, classic and the
+  Sport skin sends the new view to the iPhone through the dongle, which the stock dongle cannot
+  forward. *Car test pending.*
+- **Sport skin small map: own SafeArea** ([#20](https://github.com/kamgurgul/mib2q-carplay/issues/20)).
+  The Sport skin (`LayoutMIB2HighB9Sport`, big central rev counter) shifts the small map left, so
+  the classic SafeArea put the puck too far left. A third ViewArea, x=566 y=64 w=360 h=300, is
+  advertised for it, on the head unit and in the HW301 image. It is mib2q-carplay-rgi's
+  grid-calibrated rect moved into this hook's shifted canvas. Override with
+  `carplay_safearea_sport.conf` and *Apply SafeArea from SD*; the menu toggle is now
+  *Small-map SafeAreas ON / OFF (3 ViewAreas)*. On the HW301 the SafeAreas are built into the
+  image (`-DCLUSTER_SAFE2_*`). *Car test pending.*
 - **Long press of the left roller toggles the phone map and the Audi map** on the Virtual
   Cockpit (from PR #15). The short press now acts on release and still toggles the route-info
   line. The roller zooms whichever map is visible.
@@ -69,6 +77,17 @@ tests but have not been driven yet.
   *Car test pending.*
 - **The touchpad D-pad switch applies from the next touch** instead of the next CarPlay connection.
   It is never applied in the middle of a drag.
+- **Puck pushed left of the turn card without route guidance (Waze, no route)**
+  ([#20](https://github.com/kamgurgul/mib2q-carplay/issues/20)). The cluster URL asked for
+  `maneuverLayout=rightAligned`, which pinned the app's card to the right edge of the SafeArea; on
+  the Sport skin it also sat behind the rev counter. The URL no longer sets a layout, on the head
+  unit and in the HW301 image. `mibr-carplay111-nav.maneuverLayout` (`left`, `right`, `top`) still
+  picks one. *Car test pending.*
+- **Third-party apps lost their turn card and ETA in the classic small map.** iOS treats a
+  SafeArea narrower than about 498 px as narrow and then needs 0.3 x its height above about
+  87 px; the classic SafeArea was 270 tall, so iOS logged "Undefined layout (0)". The classic
+  SafeArea is now x=520 y=64 w=400 h=300 (rows 64..364, above the VC map bar), on the head unit
+  and in the HW301 image. Found in mib2q-carplay-rgi. *Car test pending.*
 - **Removed: the "Navigation is initializing" takeover from 1.2.** It did not clear the message
   in the car: the stock navigation module stays off until navigation itself is ready, so there was
   nothing to override. Ported from mib2q-carplay-rgi.
@@ -76,12 +95,16 @@ tests but have not been driven yet.
 ## Documentation and project
 
 - README: `MHI2Q_US_AUG22_P5087` (Audi A5 Sportback B9 US, MU1316) added to the supported
-  units ([#21](https://github.com/kamgurgul/mib2q-carplay/issues/21)). The HW301 is added to the
-  tested wireless adapters (from 1.3, with the custom image).
+  units ([#21](https://github.com/kamgurgul/mib2q-carplay/issues/21)), plus reports for the A4 B9
+  on P5092 ([#26](https://github.com/kamgurgul/mib2q-carplay/issues/26)) and the Q7 4M US on
+  P5087 ([#27](https://github.com/kamgurgul/mib2q-carplay/issues/27)). The HW301 (from 1.3, with
+  the custom image) and the AAWireless TWO+ (manufacturer test build) are added to the tested
+  wireless adapters.
 - New [HW301 guide](../deploy/hw301-dongle.md): flash, back to stock, FEL recovery, troubleshooting.
 - `dongle/hw301/`: the investigation notes are reduced to [FINDINGS.md](../../dongle/hw301/FINDINGS.md).
-  The official stock images (v1.26, v1.29), the custom image v1162 (and the same v1162 with logging enabled, `hw301_v1160.tar`)
-  and the FEL restore image are committed.
+  The official stock images (v1.26, v1.29), the custom image v1164, the previous custom image
+  v1162 (and that v1162 with logging enabled, `hw301_v1160.tar`) and the FEL restore image are
+  committed. The dongle build also runs on Linux/WSL (`repack.sh` no longer needs BSD `stat`).
 - Logging card also collects video-core fatal dumps, the tail of native navigation's console log,
   navigation and display-manager dumps; `sloginfo` runs first
   ([#22](https://github.com/kamgurgul/mib2q-carplay/issues/22)).
