@@ -16,9 +16,10 @@ The head-unit side lives in the repo root (`altscreen_hook/`, `scripts/`, `mods/
 |---|---|
 | `fw/hw301_v129.tar`, `fw/v129/` | **official** stock v1.29: OTA tar + `app.img` + md5 (the build input and the rollback image) |
 | `fw/hw301_v126.tar` | official stock v1.26 |
-| `fw/hw301_v1164.tar` | **custom release** (marker `v1164-20261021080230`, `build_dual.sh release`): adds the Sport-skin ViewArea, 300 px small-map SafeAreas, initial URL without `maneuverLayout` |
-| `fw/hw301_v1162.tar` | previous custom release (marker `v1162-20261020152434`) |
-| `fw/hw301_v1160.tar` | **same version as v1162** (not v1164), but it also contains enabled logging (diagnostic kmsg lines). It is a separate file and OTA code (1160, marker `v1160-20261021065350`) so the two can be told apart. `build_dual.sh optA` |
+| `fw/hw301_v1166.tar` | **custom release** (marker `v1166-20261021090922`, `build_dual.sh release`): v1164 plus no ETA on the cockpit (`showETA=no`), key frame requests from the head unit (`KEYF` back-channel) and a late key frame 3 s after the relay attaches, so the cockpit map starts after a cold start |
+| `fw/hw301_v1164.tar` | previous custom release (marker `v1164-20261021080230`): adds the Sport-skin ViewArea, 300 px small-map SafeAreas, initial URL without `maneuverLayout` |
+| `fw/hw301_v1162.tar` | older custom release (marker `v1162-20261020152434`) |
+| `fw/hw301_v1160.tar` | **same version as v1162** (not v1164/v1166), but it also contains enabled logging (diagnostic kmsg lines). It is a separate file and OTA code (1160, marker `v1160-20261021065350`) so the two can be told apart. `build_dual.sh optA` |
 | `fw/rollback/restore-app-v129-at-0x7e0000.bin` | FEL restore image of the `app` partition (stock v129 `app.img` padded to 0x3f0000) |
 | `work/src/cluster_dual.c` | the shim (installed as `libCoreUtils.so`) |
 | `work/tools/` | `build_dual.sh` → `build.sh` → `repack.sh`, `check_imports.sh`, `xcc.sh`, `flash_local.py`, `getlogs.py`, `fel_backup.sh`, `xref.py`/`findref.py` |
@@ -37,7 +38,7 @@ Needs Docker (muslcc toolchain, alpine) and squashfs-tools (`brew install squash
 
 ```bash
 cd dongle/hw301
-./work/tools/build_dual.sh release      # -> work/out/hw301_v1164.tar
+./work/tools/build_dual.sh release      # -> work/out/hw301_v1166.tar
 ./work/tools/build_dual.sh optA         # -> work/out/hw301_v1160.tar (release + enabled logging)
 ```
 
@@ -49,9 +50,9 @@ The build refuses an image whose shim imports a symbol the dongle cannot resolve
 Do not unplug while the percent is moving.
 
 ```bash
-python3 work/tools/flash_local.py fw/hw301_v1164.tar --version 1164 --dry-run   # 127 chunks, sends nothing
-python3 work/tools/flash_local.py fw/hw301_v1164.tar --version 1164
-curl http://192.168.5.1/clbuild.txt                                             # v1164-20261021080230
+python3 work/tools/flash_local.py fw/hw301_v1166.tar --version 1166 --dry-run   # 127 chunks, sends nothing
+python3 work/tools/flash_local.py fw/hw301_v1166.tar --version 1166
+curl http://192.168.5.1/clbuild.txt                                             # v1166-20261021090922
 ```
 
 The head unit also needs this repo's 1.3 (or newer) install with Cluster video ON.

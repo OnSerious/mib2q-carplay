@@ -8,9 +8,9 @@ tests but have not been driven yet.
 - **HW301 wireless dongle: the CarPlay map on the Virtual Cockpit.** The HW301 is the
   `smartBox-xxxx` dongle with the setup page at `192.168.5.1`. With its stock firmware
   (v1.26 / v1.29) it shows CarPlay on the MMI only. The custom app image
-  `dongle/hw301/fw/hw301_v1164.tar` (marker `v1164-20261021080230`) keeps that main screen and
+  `dongle/hw301/fw/hw301_v1166.tar` (marker `v1166-20261021090922`) keeps that main screen and
   adds a dedicated iPhone cluster view on the Virtual Cockpit. It is not a copy of the MMI screen.
-  The roller zooms the map, and the phone draws the turn card and ETA.
+  The roller zooms the map, and the phone draws the turn card (from v1166 without ETA).
   - Requires this release on the head unit, with **Cluster video ON**. The head-unit hook now
     opens the cluster stream for this dongle.
   - Flash on a bench USB supply, never in the car. Roll back with `hw301_v129.tar --version 129`.
@@ -41,6 +41,16 @@ tests but have not been driven yet.
   boot-time diagnostics below are written only while it is on.
 
 ## Fixed
+
+- **HW301: no cockpit map after a cold start with the dongle already plugged in.** The dongle
+  opens the cluster stream within a few seconds of power-on, and the phone sends a key frame only
+  at the start of a stream. The head unit's cluster renderer came up about 1 s later, so it never
+  got a picture (`carplay_logs/hw301_coldstart`: `source_idrs=2`, `consumer_primed=0`). The
+  head unit asks for a key frame whenever its renderer connects, but with the dongle it had no way
+  to send that request. The request now goes to the dongle as a `KEYF` message on the existing
+  back-channel, and the dongle passes it on to the phone. The dongle also asks for one more key
+  frame 3 s after it connects to the head unit. Needs the 1.3 head-unit build and dongle image
+  **v1166**. *Car test pending.*
 
 - **Native navigation late or dead after power-on with a CarPlay dongle** when CarPlay was
   the last audio source ([#10](https://github.com/kamgurgul/mib2q-carplay/issues/10),
@@ -102,7 +112,7 @@ tests but have not been driven yet.
   wireless adapters.
 - New [HW301 guide](../deploy/hw301-dongle.md): flash, back to stock, FEL recovery, troubleshooting.
 - `dongle/hw301/`: the investigation notes are reduced to [FINDINGS.md](../../dongle/hw301/FINDINGS.md).
-  The official stock images (v1.26, v1.29), the custom image v1164, the previous custom image
+  The official stock images (v1.26, v1.29), the custom image v1166, the previous custom images v1164 and
   v1162 (and that v1162 with logging enabled, `hw301_v1160.tar`) and the FEL restore image are
   committed. The dongle build also runs on Linux/WSL (`repack.sh` no longer needs BSD `stat`).
 - Logging card also collects video-core fatal dumps, the tail of native navigation's console log,

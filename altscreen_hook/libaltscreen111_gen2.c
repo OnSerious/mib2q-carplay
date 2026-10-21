@@ -1285,6 +1285,10 @@ static int g_sender_noadvertise;
 /* Dongle-only listener: keyed with stream 110's connection id (0 = not ours). */
 static uint64_t g_dongle_alt_cid;
 static int g_alt_bc_last_view = -1;   /* last ViewArea index pushed to the dongle back-channel */
+/* A renderer wants an IDR on the dongle path, where no stream-111 control
+ * session exists to send forceKeyFrame: the receiver thread sends "KEYF" on
+ * the back-channel and the dongle asks the phone. Guarded by g_lock. */
+static int g_alt_bc_keyframe;
 static volatile int g_desired_view;   /* defined below; declared here for the back-channel */
 
 static int sender_listed(const char *model, const char *build)
@@ -1717,13 +1721,19 @@ static int gen2_video_submit_au(const uint8_t *p, size_t n, int *accepted, int *
 
 static void gen2_keyframe_intent(void)
 {
-    int rc = ALT111_WAIT;
+    int rc = ALT111_WAIT, dongle = 0;
     pthread_mutex_lock(&g2_core_lock);
     if (g2_control_session)
         rc = alt111_control_keyframe(&g2_control, g2_control_session);
     pthread_cond_broadcast(&g2_core_cv);
     pthread_mutex_unlock(&g2_core_lock);
-    logf_u2("gen2 consumer keyframe intent rc=%d", rc);
+    if (!g2_control_session && g_dongle_alt_cid) {
+        pthread_mutex_lock(&g_lock);
+        g_alt_bc_keyframe = 1;
+        pthread_mutex_unlock(&g_lock);
+        dongle = 1;
+    }
+    logf_u2("gen2 consumer keyframe intent rc=%d%s", rc, dongle ? " (via dongle back-channel)" : "");
 }
 
 static void gen2_consumer_attach(void)
@@ -2110,7 +2120,7 @@ static void stop_alt_receiver(void)
     gen2_video_end_current();
 }
 
-/* Finish one VIEW message. A short write is resumed from the unsent tail.
+/* Finish one back-channel message (VIEW or KEYF). A short write is resumed from the unsent tail.
  * Resending the whole 8 bytes makes the dongle see a second "VIEW" prefix.
  * MHI2Q must use MSG_NOSIGNAL: the constructor leaves SIGPIPE alone because
  * dio_manager snapshots that disposition. -1 means drop the client. */
@@ -2201,6 +2211,18 @@ static void *alt_receiver_thread(void *arg)
                 }
                 g_alt_bc_last_view = v;
                 logf_u2("dongle back-channel: sent ViewArea %d", v);
+            }
+            pthread_mutex_lock(&g_lock);
+            v = g_alt_bc_keyframe;
+            g_alt_bc_keyframe = 0;
+            pthread_mutex_unlock(&g_lock);
+            if (v) {
+                static const uint8_t k[8] = { 'K','E','Y','F', 0, 0, 0, 0 };
+                if (send_view_msg(c, k, sizeof k) != 0) {
+                    logf_u2("dongle back-channel: key frame request send failed: %s", strerror(errno));
+                    break;
+                }
+                logf_u2("dongle back-channel: sent key frame request");
             }
         }
         rr = read_exact(c, &h, sizeof(h));

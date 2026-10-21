@@ -158,10 +158,12 @@
  * the phone draw the turn card and ETA into the cluster itself. Match that,
  * without maneuverLayout: rightAligned pinned the card to the SafeArea's right
  * edge and the app moved the puck left of it (issue #20; on the Sport skin the
- * card also went behind the rev counter). Override with -DCLUSTER_URL_INITIAL=... (e.g. the RGI-on bare /map when the
- * head unit draws its own maneuver). */
+ * card also went behind the rev counter). No ETA on the cockpit (v1166): the
+ * root URL still keeps the turn card with showETA=no. Override with
+ * -DCLUSTER_URL_INITIAL=... (e.g. the RGI-on bare /map when the head unit draws
+ * its own maneuver). */
 #ifndef CLUSTER_URL_INITIAL
-#define CLUSTER_URL_INITIAL "maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no"
+#define CLUSTER_URL_INITIAL "maps:/car/instrumentcluster?showETA=no&showSpeedLimit=no"
 #endif
 #define URL_CLUSTER "maps:/car/instrumentcluster"
 #define URL_MAP "maps:/car/instrumentcluster/map"
@@ -228,6 +230,9 @@
 #define HU_WRITE_MS 60           /* max per-frame wait for the head-unit socket; else drop */
 #define VIEW_COUNT 3             /* advertised ViewAreas (wide, classic, sport) */
 #define BC_MAGIC "VIEW"          /* head-unit -> dongle back-channel: "VIEW" + u32 LE index */
+#define BC_KEYF "KEYF"           /* back-channel: "KEYF" + u32 (ignored), head-unit decoder wants an IDR */
+#define KF_MIN_S 1               /* at most one back-channel key frame request per second */
+#define KF_LATE_S 3              /* one more key frame this long after the relay attaches */
 #define SPSSI_SIZE 0x2b8         /* SetupProxyScreenSecurityInfo span, v129 */
 
 #define HDR_SIZE 128
@@ -1201,7 +1206,7 @@ static struct {
     int nokey_logged;
     unsigned long relayed, err, dropped;
     int backlog;             /* consecutive drops; 0 after a successful send */
-    uint8_t bc[8];           /* back-channel accumulator (VIEW message) */
+    uint8_t bc[8];           /* back-channel accumulator (VIEW / KEYF message) */
     int bc_len;
 } g_relay = { .fd = -1 };
 
@@ -1214,11 +1219,14 @@ static void relay_drop_locked(int dead) {
     g_relay.bc_len = 0;
 }
 
-/* Non-blocking read of the head-unit back-channel (VIEW + u32 index). Returns
- * the ViewArea index when a full message arrives, else -1. The head unit sends
- * it on the stream-111 socket when the cockpit layout changes. */
-__attribute__((unused)) static int relay_poll_view(void) {
+/* Non-blocking read of the head-unit back-channel. Returns the ViewArea index
+ * when a full VIEW message arrives, else -1; *keyframe is set on a KEYF message.
+ * The head unit sends VIEW on the stream-111 socket when the cockpit layout
+ * changes, and KEYF when its decoder attaches after the phone's IDR has passed
+ * (cold start: the renderer comes up after the dongle's stream). */
+__attribute__((unused)) static int relay_poll_bc(int *keyframe) {
     int view = -1;
+    *keyframe = 0;
     pthread_mutex_lock(&g_relay_lock);
     if (g_relay.fd >= 0) {
         struct pollfd pf = { g_relay.fd, POLLIN, 0 };
@@ -1231,6 +1239,9 @@ __attribute__((unused)) static int relay_poll_view(void) {
                 if (memcmp(g_relay.bc, BC_MAGIC, 4) == 0) {
                     view = g_relay.bc[4] | (g_relay.bc[5] << 8) |
                            (g_relay.bc[6] << 16) | (g_relay.bc[7] << 24);
+                    g_relay.bc_len = 0;
+                } else if (memcmp(g_relay.bc, BC_KEYF, 4) == 0) {
+                    *keyframe = 1;
                     g_relay.bc_len = 0;
                 } else {                       /* resync: drop the first byte */
                     memmove(g_relay.bc, g_relay.bc + 1, 7);
@@ -1404,6 +1415,7 @@ static void *rx_thread(void *varg) {
     int log_now = 0;
 #if STEP_DECRYPT
     int desync = 0, last_view = -1;
+    long kf_last = 0, kf_late = 0;          /* back-channel rate limit; late key frame due (s) */
     uint8_t cc_key[32], cc_nonce[8];
 #endif
     /* full cached VIDEO_CONFIG (header + body), replaced on every config */
@@ -1445,10 +1457,26 @@ static void *rx_thread(void *varg) {
         uint8_t *body = 0;
         int rr;
 #if STEP_DECRYPT
-        /* cockpit layout change from the head unit -> tell the phone */
+        /* cockpit layout change / key frame request from the head unit -> tell the phone */
         if (STEP_RELAY && !disabled() && !flag(NORELAY_FILE)) {
-            int vw = relay_poll_view();
+            int kf = 0, vw = relay_poll_bc(&kf);
+            long now = time_plain(0);
             if (vw >= 0 && vw != last_view) { last_view = vw; send_view(a.session, vw); }
+            if (kf && now - kf_last >= KF_MIN_S) {
+                kf_last = now;
+                dlog("head-unit asked for a key frame");
+                ask_keyframe(a.session);
+            } else if (kf && (!kf_late || kf_late > kf_last + KF_MIN_S)) {
+                kf_late = kf_last + KF_MIN_S;  /* rate-limited: defer, do not drop */
+            }
+            /* A head-unit decoder that attaches just after the relay's first
+             * IDR never gets a picture. One more IDR a few seconds later also
+             * covers head-unit builds that do not send KEYF. */
+            if (kf_late && now >= kf_late) {
+                kf_late = 0;
+                dlog("late key frame for the head unit");
+                ask_keyframe(a.session);
+            }
         }
 #endif
         rr = read_full(c, &h, sizeof h, a.gen);
@@ -1471,8 +1499,12 @@ static void *rx_thread(void *varg) {
                 }
                 /* forward a config update to an already-open head-unit socket (plain) */
                 if (STEP_RELAY && dec_ok && !disabled() && !flag(NORELAY_FILE) &&
-                    relay_config(a.gen, &attached, &h, body))
+                    relay_config(a.gen, &attached, &h, body)) {
                     ask_keyframe(a.session);
+#if STEP_DECRYPT
+                    kf_late = time_plain(0) + KF_LATE_S;
+#endif
+                }
             }
         } else if (h.opcode == OP_VIDEO_FRAME) {
             if (body && h.bodySize) {
@@ -1529,8 +1561,12 @@ static void *rx_thread(void *varg) {
 
                 /* relay the authenticated AU; relay_frame re-encrypts with the HU AES key. */
                 if (STEP_RELAY && dec_ok && opened && !disabled() && !flag(NORELAY_FILE) &&
-                    relay_frame(a.gen, &attached, &h, body, &cfg_hdr, cfg, cfg_len))
+                    relay_frame(a.gen, &attached, &h, body, &cfg_hdr, cfg, cfg_len)) {
                     ask_keyframe(a.session);           /* outside g_relay_lock */
+#if STEP_DECRYPT
+                    if (!kf_late) kf_late = time_plain(0) + KF_LATE_S;
+#endif
+                }
             }
         }
         /* keepalive / forceKeyFrame / ignore: nothing */
