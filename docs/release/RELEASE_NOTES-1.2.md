@@ -104,7 +104,8 @@ Developed on an Audi A5 (F5) with MU1329 (`MHI2Q_ER_AUG22_P5152`); also reported
 | Wireless adapter | ✅ with tested adapters (see below) | not tested |
 
 **Wireless adapters** reported to work with the cluster map: Baseus Safe Journey (fast) and
-Carlinkit 5.0 / 2Air (slow to start). Generic `smartBox-xxxx` dongles do not work.
+Carlinkit 5.0 / 2Air (slow to start). Generic `smartBox-xxxx` dongles do not work with 1.2.
+An HW301 `smartBox` dongle with custom firmware is supported from **1.3** ([HW301 guide](../deploy/hw301-dongle.md)).
 
 ## Requirements
 

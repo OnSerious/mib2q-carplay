@@ -104,7 +104,7 @@ tests but have not been driven yet.
 
 - README: **Supported units** (P5152 A5 F5 MU1329, P5092 MU1329) and **Tested wireless
   adapters** (Baseus Safe Journey: works, fast; Carlinkit 5.0 / 2Air: works, slow to start;
-  generic `smartBox-xxxx`: does not work).
+  generic `smartBox-xxxx`: does not work; the HW301 is supported from [1.3](CHANGELOG-1.3.md)).
   ([#5](https://github.com/kamgurgul/mib2q-carplay/issues/5))
 - README: a section on the CarPlay-RGI Green Engineering Menu page and all its buttons.
 - GitHub bug report template. It asks for firmware, settings and both log saves.

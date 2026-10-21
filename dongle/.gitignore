@@ -1,0 +1,60 @@
+# ───────────────────────────────────────────────────────────────────────────
+# HW301 CarPlay dongle workspace — commit SOURCE, NOTES and FIRMWARE only.
+#
+# Tracked: hw301/README.md, hw301/FINDINGS.md, work/src/cluster_dual.c,
+#   work/tools/*, work/ghidra/{DumpRelay,DispParse}.java + *.txt dumps,
+#   work/cmp/*.json, dongle_dump.py, fw_download.py, and the firmware below.
+# ───────────────────────────────────────────────────────────────────────────
+
+# Python venv / caches
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# Unpacked stock rootfs trees (derive with: unsquashfs fw/v<ver>/app.img)
+hw301/fw/v*/root/
+hw301/dongle_dump/
+
+# Generated: build trees, extracted rootfs, packed OTA images, verify scratch
+hw301/work/build-v*/
+hw301/work/extract/
+hw301/work/out/
+hw301/work/_verify/
+hw301/work/third_party/
+
+# Owner data: device/phone logs and FEL flash dumps (hold env/private partitions)
+hw301/work/logs/
+hw301/work/rollback/
+
+# Ghidra: project DB and copied binaries, plus the exploratory scripts (kept
+# locally for reuse). Only the scripts behind the saved dumps are tracked.
+hw301/work/ghidra/proj/
+hw301/work/ghidra/*.so
+hw301/work/ghidra/*.java
+hw301/work/ghidra/*.py
+!hw301/work/ghidra/DumpRelay.java
+!hw301/work/ghidra/DispParse.java
+
+# Scratch experiment dir (musl interposition test stubs)
+hw301/work/exp/
+
+# Binary artifacts anywhere under the dongle tree
+*.img
+*.tar
+*.so
+*.o
+*.bin
+*.squashfs
+.DS_Store
+
+# …but DO keep the firmware (these override the rules above):
+#   official stock OTA tars (Wi-Fi rollback) + v129 app.img (the build input)
+#   newest custom image v1162, plus the same v1162 with logging enabled (file/OTA code 1160)
+#   FEL restore image of the app partition (stock v129, see README "Rollback")
+!hw301/fw/hw301_v126.tar
+!hw301/fw/hw301_v129.tar
+!hw301/fw/hw301_v1160.tar
+!hw301/fw/hw301_v1162.tar
+!hw301/fw/v129/app.img
+!hw301/fw/rollback/
+!hw301/fw/rollback/restore-app-v129-at-0x7e0000.bin

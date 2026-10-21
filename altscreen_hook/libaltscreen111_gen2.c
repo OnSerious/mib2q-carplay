@@ -392,6 +392,11 @@ static const char *g_rgi_url_disable_marker = "/mnt/app/root/mibr-carplay111-rgi
  * config edit: echo 6200 > /mnt/app/mibr-carplay111.port
  */
 static const char *g_port_override_path = "/mnt/app/mibr-carplay111.port";
+/* Port the HW301 dongle dials. cluster_dual.c reads /mnt/UDISK/cluster_hu.port
+ * on the dongle; this file is the head-unit copy of that number. Absent on
+ * both sides means 7100. The wired override above is not this port: SETUP
+ * does not tell the dongle where the listener went. */
+static const char *g_dongle_port_path = "/mnt/app/cluster_hu.port";
 /*
  * Same idea for the /info advertisement itself. Creating this file makes
  * AirPlayCopyServerInfo return the stock dictionary byte-for-byte and stops the
@@ -1101,6 +1106,20 @@ static int contains_stream_type(CFDictionaryRef request, int wanted)
     return 0;
 }
 
+/* streamConnectionID of the first stream with this type, or 0. */
+static uint64_t stream_cid_of_type(CFDictionaryRef request, int wanted)
+{
+    CFArrayRef a = get_streams(request);
+    CFIndex i, n;
+    if (!a) return 0;
+    n = p_CFArrayGetCount(a);
+    for (i = 0; i < n; ++i) {
+        CFDictionaryRef sd = (CFDictionaryRef)p_CFArrayGetValueAtIndex(a, i);
+        if (stream_type(sd) == wanted) return stream_connection_id(sd);
+    }
+    return 0;
+}
+
 static int contains_stream111(CFDictionaryRef request, CFDictionaryRef *outDesc, int *outOtherCount)
 {
     CFArrayRef a = get_streams(request);
@@ -1188,6 +1207,26 @@ static int current_alt_port(void)
     return v;
 }
 
+/* Port the dongle will connect to. No fallback list: a different bind leaves
+ * CarPlay up and the cluster black, because this path does not put dataPort
+ * in the SETUP response. -1 means "do not listen". */
+static int dongle_listen_port(void)
+{
+    char b[16];
+    int v = ALT111_DEFAULT_PORT;
+    if(read_trimmed_value(g_dongle_port_path, b, sizeof(b)) == 0){
+        int n = atoi(b);
+        if(n > 0 && n < 65536) v = n;
+        else logf_u2("dongle stream111 port %s invalid ('%s'); using %d",
+                     g_dongle_port_path, b, ALT111_DEFAULT_PORT);
+    }
+    if(stock_port_reserved(v)){
+        logf_u2("dongle stream111 port %d is a stock CarPlay port; not listening", v);
+        return -1;
+    }
+    return v;
+}
+
 /*
  * Senders that must not see the AltScreen advertisement.
  *
@@ -1200,6 +1239,10 @@ static int current_alt_port(void)
  */
 static const char *g_noadvertise_senders_path = "/mnt/app/root/mibr-carplay111-noadvertise.senders";
 static int g_sender_noadvertise;
+/* Dongle-only listener: keyed with stream 110's connection id (0 = not ours). */
+static uint64_t g_dongle_alt_cid;
+static int g_alt_bc_last_view = -1;   /* last ViewArea index pushed to the dongle back-channel */
+static volatile int g_desired_view;   /* defined below; declared here for the back-channel */
 
 static int sender_listed(const char *model, const char *build)
 {
@@ -2024,6 +2067,25 @@ static void stop_alt_receiver(void)
     gen2_video_end_current();
 }
 
+/* Finish one VIEW message. A short write is resumed from the unsent tail.
+ * Resending the whole 8 bytes makes the dongle see a second "VIEW" prefix.
+ * MHI2Q must use MSG_NOSIGNAL: the constructor leaves SIGPIPE alone because
+ * dio_manager snapshots that disposition. -1 means drop the client. */
+static int send_view_msg(int fd, const uint8_t *msg, size_t len)
+{
+    size_t off = 0;
+    while (off < len) {
+        ssize_t w = send(fd, msg + off, len - off, MSG_NOSIGNAL);
+        if (w > 0) {
+            off += (size_t)w;
+            continue;
+        }
+        if (w < 0 && errno == EINTR) continue;
+        return -1;
+    }
+    return 0;
+}
+
 static void *alt_receiver_thread(void *arg)
 {
     int listen_fd = (int)(intptr_t)arg;
@@ -2076,10 +2138,29 @@ static void *alt_receiver_thread(void *arg)
     pthread_mutex_lock(&g_lock); g_alt_client = c; pthread_mutex_unlock(&g_lock);
     logf_u2("AltScreen stream 111 connected");
     publish_state("connected");
+    /* Dongle path only: the dongle cannot carry updateViewArea through
+     * CPAAProxyEx, so send the desired ViewArea back to it on this socket
+     * (magic "VIEW" + u32 LE index); the dongle forwards it to the phone.
+     * -1 forces a send of the current view on the first loop iteration. */
+    g_alt_bc_last_view = -1;
     for (;;) {
         AirPlayScreenHeaderCompat h;
         uint8_t *body = NULL;
-        int rr = read_exact(c, &h, sizeof(h));
+        int rr;
+        if (g_dongle_alt_cid) {                 /* dongle receiver: push view changes back to it */
+            int v = g_desired_view;
+            if (v != g_alt_bc_last_view) {
+                uint8_t m[8] = { 'V','I','E','W',
+                                 (uint8_t)v, (uint8_t)(v>>8), (uint8_t)(v>>16), (uint8_t)(v>>24) };
+                if (send_view_msg(c, m, sizeof m) != 0) {
+                    logf_u2("dongle back-channel: view send failed: %s", strerror(errno));
+                    break;
+                }
+                g_alt_bc_last_view = v;
+                logf_u2("dongle back-channel: sent ViewArea %d", v);
+            }
+        }
+        rr = read_exact(c, &h, sizeof(h));
         if (rr <= 0) break;
         if (h.bodySize > MAX_SCREEN_BODY) { logf_u2("reject bodySize=%u", h.bodySize); break; }
         if (h.bodySize) {
@@ -2178,11 +2259,12 @@ done:
     return NULL;
 }
 
-static int start_alt_receiver(uint64_t connection_id)
+static int start_alt_receiver(uint64_t connection_id, int pinned_port)
 {
     uint8_t key[16], iv[16];
     int actual = 0;
-    int allow_ephemeral = env_i("ALTSCREEN111_ALLOW_EPHEMERAL", ALT111_DEFAULT_ALLOW_EPHEMERAL);
+    int allow_ephemeral = pinned_port > 0 ? 0
+        : env_i("ALTSCREEN111_ALLOW_EPHEMERAL", ALT111_DEFAULT_ALLOW_EPHEMERAL);
 
     /* Complete previous worker teardown before reusing global session state. */
     stop_alt_receiver();
@@ -2211,29 +2293,44 @@ static int start_alt_receiver(uint64_t connection_id)
     memset(key,0,sizeof(key)); memset(iv,0,sizeof(iv));
     g_alt_aes_valid = 1;
 
-    /* iPhone-facing listener: reachable from CarPlay link, not loopback. */
-    g_alt_port = current_alt_port();
-    g_alt_listen = bind_listener_stream111(g_alt_port, &actual, allow_ephemeral);
+    /* iPhone-facing listener: reachable from CarPlay link, not loopback.
+     * pinned_port > 0 is the dongle path: bind only the port it dials.
+     * Fallbacks are reachable by a phone because SETUP carries dataPort;
+     * the dongle never sees that field. */
+    if (pinned_port > 0) {
+        g_alt_port = pinned_port;
+        g_alt_listen = bind_listener_stream111(g_alt_port, &actual, 0);
+    } else {
+        g_alt_port = current_alt_port();
+        g_alt_listen = bind_listener_stream111(g_alt_port, &actual, allow_ephemeral);
 #ifdef ALT111_TARGET_MHI2Q
-    {
-        size_t i;
-        int tried = g_alt_port;
-        for (i = 0; g_alt_listen < 0 &&
-                    i < sizeof(g_alt_port_fallbacks) / sizeof(g_alt_port_fallbacks[0]); ++i) {
-            int p = g_alt_port_fallbacks[i];
-            if (p == g_alt_port) continue;
-            logf_u2("stream111 port %d unavailable (%s); trying PF-permitted %d",
-                    tried, strerror(errno), p);
-            tried = p;
-            g_alt_listen = bind_listener_stream111(p, &actual, 0);
+        {
+            size_t i;
+            int tried = g_alt_port;
+            for (i = 0; g_alt_listen < 0 &&
+                        i < sizeof(g_alt_port_fallbacks) / sizeof(g_alt_port_fallbacks[0]); ++i) {
+                int p = g_alt_port_fallbacks[i];
+                if (p == g_alt_port) continue;
+                logf_u2("stream111 port %d unavailable (%s); trying PF-permitted %d",
+                        tried, strerror(errno), p);
+                tried = p;
+                g_alt_listen = bind_listener_stream111(p, &actual, 0);
+            }
         }
-    }
 #endif
+    }
     if (g_alt_listen < 0) {
+        int bind_err = errno;
         g_aes_ctr_final(&g_alt_aes);
         g_alt_aes_valid=0;
         pthread_mutex_unlock(&g_lock);
         gen2_video_end_current();
+        if (pinned_port > 0) {
+            logf_u2("dongle stream111 listener not bound on port %d (no fallback): %s",
+                    g_alt_port, strerror(bind_err));
+            return -1;
+        }
+        errno = bind_err;
         logf_u2("cannot bind iPhone stream111 listener on port %d: %s"
 #ifdef ALT111_TARGET_MHI2Q
                 " (no ephemeral fallback on MHI2Q: PF only permits 5000:5001 5010 6000:6001"
@@ -3995,6 +4092,27 @@ static OSStatus mibr_session_setup(AirPlayReceiverSessionRef s, CFDictionaryRef 
 
     hasAlt=g_enabled && contains_stream111(request,&altDesc,&other);
     if(!hasAlt){
+        /* The wireless dongle never asks for 111 (advertisement guard stays ON,
+         * so CPAAProxyEx stays a single-screen bridge). Other dongles seal the
+         * screen with the AES key SetupProxyScreenSecurityInfo derives for
+         * stream 110's connection id. Open the listener on that same id and
+         * leave the SETUP response stock: do not append a 111 entry. */
+        if(g_sender_noadvertise){
+            uint64_t main_cid = stream_cid_of_type(request, 110);
+            if(main_cid && !(g_alt_thread_started && g_dongle_alt_cid == main_cid)){
+                int pinned = dongle_listen_port();
+                int dport = pinned > 0 ? start_alt_receiver(main_cid, pinned) : -1;
+                if(dport > 0){
+                    g_dongle_alt_cid = main_cid;
+                    logf_u2("dongle sender: stream111 listener cid=%llu port=%d aes=1 (110 key, response unchanged)",
+                            (unsigned long long)main_cid, dport);
+                }else{
+                    g_dongle_alt_cid = 0;
+                    logf_u2("dongle sender: stream111 listener not started cid=%llu port=%d",
+                            (unsigned long long)main_cid, pinned);
+                }
+            }
+        }
         if(outResponse)*outResponse=stockResp;
         else if(stockResp)p_CFRelease(stockResp);
         return e;
@@ -4009,7 +4127,7 @@ static OSStatus mibr_session_setup(AirPlayReceiverSessionRef s, CFDictionaryRef 
         logf_u2("stream111 SETUP fail-soft: missing streamConnectionID");
         publish_state("setup_failed");
     }else{
-        port=start_alt_receiver(cid);
+        port=start_alt_receiver(cid, 0);
         if(port>0 && stockResp){
             append_alt_setup_response((CFMutableDictionaryRef)stockResp,altDesc,port);
             gen2_control_projection_on();
@@ -4112,8 +4230,16 @@ static void mibr_session_teardown(AirPlayReceiverSessionRef s, CFDictionaryRef r
         gen2_control_release();
         gen2_set_command_ready(0);
         stop_alt_receiver();
+        g_dongle_alt_cid = 0;
         clear_video_observer();
         publish_state("idle");
+    } else if(has_main && g_sender_noadvertise && g_dongle_alt_cid) {
+        /* This listener's AES key is stream 110's. A new 110 SETUP derives a
+         * new key; drop the old CTR state so the next listener starts at the IV. */
+        logf_u2("dongle sender: stream110 teardown -> stop stream111 listener");
+        stop_alt_receiver();
+        g_dongle_alt_cid = 0;
+        clear_video_observer();
     } else if(has_main) {
         logf_u2("GEN2 TEARDOWN stock110-only -> preserving private111 transport/control state");
     }
