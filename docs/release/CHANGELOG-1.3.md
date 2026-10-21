@@ -18,11 +18,11 @@ tests but have not been driven yet.
     restore image.
   - Steps: [HW301 guide](../deploy/hw301-dongle.md).
 
-  Map, MMI and zoom were tested in the car with v1154. Turn card and ETA, the corrected safe
-  area and layout switching came in later builds and are *car test pending*.
+  The start with the dongle already plugged in at power-on (cold-start fix below) is
+  *car test pending*.
 - **Cockpit layout switch resizes the dongle's cluster map.** Switching wide, classic and the
   Sport skin sends the new view to the iPhone through the dongle, which the stock dongle cannot
-  forward. *Car test pending.*
+  forward.
 - **Sport skin small map: own SafeArea** ([#20](https://github.com/kamgurgul/mib2q-carplay/issues/20)).
   The Sport skin (`LayoutMIB2HighB9Sport`, big central rev counter) shifts the small map left, so
   the classic SafeArea put the puck too far left. A third ViewArea, x=566 y=64 w=360 h=300, is
@@ -35,7 +35,7 @@ tests but have not been driven yet.
   Cockpit (from PR #15). The short press now acts on release and still toggles the route-info
   line. The roller zooms whichever map is visible.
 - **Dial favorites that have no number** from the cluster phone tab. They are dialled by their
-  address-book entry. *Car test pending.*
+  address-book entry.
 - **Verbose logging ON / OFF** in the Green Engineering Menu. It stays on after a reboot
   (`/mnt/app/carplay_verbose`). *Save logs* still turns it on only until the next reboot. The
   boot-time diagnostics below are written only while it is on.
@@ -45,13 +45,13 @@ tests but have not been driven yet.
 - **HW301: no cockpit map after a cold start with the dongle already plugged in.** The dongle
   opens the cluster stream within a few seconds of power-on, and the phone sends a key frame only
   at the start of a stream. The head unit's cluster renderer came up about 1 s later, so it never
-  got a picture (`carplay_logs/hw301_coldstart`: `source_idrs=2`, `consumer_primed=0`). The
-  head unit asks for a key frame whenever its renderer connects, but with the dongle it had no way
+  got a picture. The head unit asks for a key frame whenever its renderer connects, but with the dongle it had no way
   to send that request. The request now goes to the dongle as a `KEYF` message on the existing
   back-channel, and the dongle passes it on to the phone. The dongle also asks for one more key
   frame 3 s after it connects to the head unit. Needs the 1.3 head-unit build and dongle image
   **v1166**. *Car test pending.*
-
+- **No ETA on the HW301 cockpit map.** From v1166 the dongle asks the phone for the cluster map
+  with `showETA=no`; the turn card stays.
 - **Native navigation late or dead after power-on with a CarPlay dongle** when CarPlay was
   the last audio source ([#10](https://github.com/kamgurgul/mib2q-carplay/issues/10),
   [#22](https://github.com/kamgurgul/mib2q-carplay/issues/22)). Navigation took 2-4 minutes
@@ -84,7 +84,6 @@ tests but have not been driven yet.
 - **Android Auto dropped when the cluster day/night theme changed during a session**
   ([#19](https://github.com/kamgurgul/mib2q-carplay/issues/19)). The theme is now chosen when the
   phone connects. A day/night change while connected waits for the next connection.
-  *Car test pending.*
 - **The touchpad D-pad switch applies from the next touch** instead of the next CarPlay connection.
   It is never applied in the middle of a drag.
 - **Puck pushed left of the turn card without route guidance (Waze, no route)**
@@ -92,12 +91,12 @@ tests but have not been driven yet.
   `maneuverLayout=rightAligned`, which pinned the app's card to the right edge of the SafeArea; on
   the Sport skin it also sat behind the rev counter. The URL no longer sets a layout, on the head
   unit and in the HW301 image. `mibr-carplay111-nav.maneuverLayout` (`left`, `right`, `top`) still
-  picks one. *Car test pending.*
+  picks one.
 - **Third-party apps lost their turn card and ETA in the classic small map.** iOS treats a
   SafeArea narrower than about 498 px as narrow and then needs 0.3 x its height above about
   87 px; the classic SafeArea was 270 tall, so iOS logged "Undefined layout (0)". The classic
   SafeArea is now x=520 y=64 w=400 h=300 (rows 64..364, above the VC map bar), on the head unit
-  and in the HW301 image. Found in mib2q-carplay-rgi. *Car test pending.*
+  and in the HW301 image. Found in mib2q-carplay-rgi.
 - **Removed: the "Navigation is initializing" takeover from 1.2.** It did not clear the message
   in the car: the stock navigation module stays off until navigation itself is ready, so there was
   nothing to override. Ported from mib2q-carplay-rgi.

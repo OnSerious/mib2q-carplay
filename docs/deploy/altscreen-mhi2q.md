@@ -185,7 +185,6 @@ behind the rev counter). `mibr-carplay111-nav.maneuverLayout` (`left`, `right`, 
 Every existing URL override wins (`/tmp/mibr-alt111-url-mode`, `mibr-carplay111-nav.surface`,
 `mibr-carplay111-url-map.enabled`, `mibr-carplay111-nav-query.enabled`, `ALTSCREEN111_PARITY_URL`).
 `mibr-carplay111-rgi-url.disabled` restores the historic bare `maps:/car/instrumentcluster`.
-*Car test pending on MU1329.*
 
 Renderer (`altscreen_render`):
 

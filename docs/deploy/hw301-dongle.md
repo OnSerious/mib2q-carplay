@@ -24,7 +24,7 @@ cluster map on the Virtual Cockpit:
 - the iPhone draws a dedicated cluster view, not a copy of the MMI screen;
 - the steering-wheel roller zooms the map;
 - the phone draws the turn card on the cluster (no ETA from v1166);
-- switching between the wide, classic and Sport-skin cockpit layouts resizes the map *(car test pending)*.
+- switching between the wide, classic and Sport-skin cockpit layouts resizes the map.
   The previous image v1162 knows only wide and classic; on the Sport skin it keeps the previous layout.
 
 It is CarPlay only. It does not add Android Auto on the cluster.

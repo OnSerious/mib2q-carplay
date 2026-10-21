@@ -13,7 +13,7 @@ normal CarPlay on the MMI (stream 110, stock path) **and** a dedicated iOS clust
 (stream 111, 1440x540) on the Virtual Cockpit. It is not a mirror. CPAAProxyEx is not
 byte-patched. Roller zoom works.
 
-Built on top of that and still *car test pending*: the phone drawing maneuver and ETA
+Built on top of that: the phone drawing maneuver and ETA
 (v1156), SafeArea 270 (v1158), and re-rendering the map on a wide/classic cockpit switch
 (v1160 back-channel). The release image v1164 includes all of these, plus the Sport-skin
 ViewArea, 300 px small-map SafeAreas and the initial URL without `maneuverLayout` (issue #20).
@@ -216,7 +216,7 @@ of frames, `nal_ok=1 bad=0`):
 | 1158 | SafeArea 270 | |
 | 1160 | **same version as v1162, also contains enabled logging** (`build_dual.sh optA`, `CLUSTER_DIAG=1`, `v1160-20261021065350`). It first added the cockpit-switch back-channel and was rebuilt 2026-10-21 from the v1162 source; the first v1160 predated the review fixes | archived `fw/hw301_v1160.tar` |
 | 1162 | previous release = same source as 1160 with diagnostics off (`v1162-20261020152434`) | archived `fw/hw301_v1162.tar` |
-| 1164 | release: third ViewArea (Sport skin small map 566,64,360,300), classic 520,64,400,300, `initialURL` without `maneuverLayout=rightAligned` (`build_dual.sh release`, `v1164-20261021080230`). *Car test pending* | archived `fw/hw301_v1164.tar` |
+| 1164 | release: third ViewArea (Sport skin small map 566,64,360,300), classic 520,64,400,300, `initialURL` without `maneuverLayout=rightAligned` (`build_dual.sh release`, `v1164-20261021080230`). Sport ViewArea *car test pending* | archived `fw/hw301_v1164.tar` |
 | **1166** | release: v1164 + no ETA (`showETA=no`) + `KEYF` back-channel key frame requests and a late key frame 3 s after the relay attaches; fixes the blank cockpit map after a cold start (`build_dual.sh release`, `v1166-20261021090922`). *Car test pending* | archived `fw/hw301_v1166.tar` |
 
 ## Open items
