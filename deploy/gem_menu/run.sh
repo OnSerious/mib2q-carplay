@@ -53,6 +53,31 @@ release_dir() {
     return 1
 }
 
+# CarPlay cluster map content switch: $1 = file suffix, $2 = default (yes|no), $3 = label.
+# Absent file = default; the toggle writes the other value or removes the file again.
+# With a CarPlay cluster session up, the hook re-sends showUI with the new URL.
+cluster_switch() {
+    F=/mnt/app/root/mibr-carplay111-nav.$1
+    cur=$2
+    [ -f "$F" ] && cur=$(cat "$F" 2>/dev/null)
+    case $cur in yes|1|user) cur=yes ;; *) cur=no ;; esac
+    if [ "$cur" = yes ]; then new=no; else new=yes; fi
+    mount -uw /mnt/app 2>/dev/null
+    if [ "$new" = "$2" ]; then
+        rm -f "$F"
+    else
+        echo "$new" > "$F" || { echo "FAILED: cannot write $F"; exit 1; }
+    fi
+    sync
+    if [ "$new" = yes ]; then echo "DONE. $3 ON on the cluster map."; else echo "DONE. $3 OFF on the cluster map."; fi
+    if grep -q '^command_ready=1' /tmp/mibr-alt111-gen2.status 2>/dev/null; then
+        : > /tmp/mibr-alt111-show-only
+        echo "Applied to the running CarPlay session (reconnect if the VC does not change)."
+    else
+        echo "Applies at the next CarPlay connection."
+    fi
+}
+
 run_action() {
     [ -f "$A/$1/custom.sh" ] || { echo "FAILED: action $1 missing in $A (re-run menu_install)"; exit 1; }
     exec /bin/sh "$A/$1/custom.sh"
@@ -203,6 +228,15 @@ case $ACT in
         fi
         echo "Applies at the next phone connection (a day/night change while connected waits for it too)."
         ;;
+    cluster_maneuver)
+        cluster_switch showManeuver yes "Turn card"
+        ;;
+    cluster_eta)
+        cluster_switch showETA no "ETA"
+        ;;
+    cluster_speed)
+        cluster_switch showSpeedLimit no "Speed limit"
+        ;;
     reacquire)
         # Test: re-send the cluster showUI in the running session, so iOS picks
         # which navigation app draws the VC map again (/tmp, consumed by the hook).
@@ -233,7 +267,7 @@ case $ACT in
         echo "DONE. CarPlay-RGI menu removed; it disappears after the next reboot."
         ;;
     *)
-        echo "usage: run.sh install|uninstall|logs|lsd|verbose|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
+        echo "usage: run.sh install|uninstall|logs|lsd|verbose|altscreen_on|altscreen_off|rgd_enable|rgd_disable|aa_cluster_on|aa_cluster_off|aa_daynight|touchpad_dpad_on|touchpad_dpad_off|grid|safearea|safearea_reset|singleview|cluster_maneuver|cluster_eta|cluster_speed|reacquire|hwdec|hwdelay|siri_short|omxprobe|remove_menu"
         exit 2
         ;;
 esac

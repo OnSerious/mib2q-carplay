@@ -169,16 +169,23 @@ uses one ViewArea; `mibr-carplay111-noadvertise.senders` lists extra senders (on
 dongle (`model=iPhone9,1`, `osBuildVersion=18D70`) is built in: it never requests stream 111 and
 drops the session when it sees the advertisement.
 
-**Cluster URL follows the guidance source** (ported from luka-dev/mib2q-carplay-rgi). Java sends
-`CMD_ALT_RGI 0x0116` on every confirmed route-guidance edge (`ScreenModule.republish`, again on the
-hook's hello); `libcarplay_hook` hands it to `altscreen111_set_rgi`, which re-sends `showUI`:
+**Cluster URL content is set by three GEM switches** (*Cluster map turn card / ETA / speed limit
+ON / OFF*), independent of route guidance. Each is a value file in `/mnt/app/root/`; absent = default:
 
-| route guidance | URL | why |
+| file `mibr-carplay111-nav.…` | default | values |
 | --- | --- | --- |
-| on (our BAP/KDK arrow) | `maps:/car/instrumentcluster/map?showETA=no&maneuverLayout=no&showSpeedLimit=no` | Maps' own turn card and ETA would show twice; the root URL keeps them even with `showETA=no` |
-| off (Waze, no route) | `maps:/car/instrumentcluster?showETA=yes&showSpeedLimit=no` | the app's own turn card and ETA are the only guidance on the cluster |
+| `showManeuver` | `yes` | `yes` = root URL `maps:/car/instrumentcluster` with the app's turn card; `no` = bare `…/map` surface (the root URL is "anyContent" and keeps the card even with `showETA=no`) |
+| `showETA` | `no` | `yes` / `no` |
+| `showSpeedLimit` | `no` | `yes` / `no` / `user` (follows the iPhone's Maps setting; file only) |
 
-The off URL carries no `maneuverLayout`: 1.2's `rightAligned` pinned the app's card to the SafeArea's
+Defaults give `maps:/car/instrumentcluster?showETA=no&showSpeedLimit=no`; turn card off gives
+`maps:/car/instrumentcluster/map?showETA=…&maneuverLayout=no&showSpeedLimit=…`. With our BAP/KDK arrow
+active the phone's turn card is therefore shown as well unless the turn-card switch is OFF. A GEM press
+with a session up (`command_ready=1` in `/tmp/mibr-alt111-gen2.status`) re-sends `showUI` through
+`/tmp/mibr-alt111-show-only`; otherwise it applies at the next connection. Java still sends
+`CMD_ALT_RGI 0x0116` on route-guidance edges; `altscreen111_set_rgi` only logs it.
+
+The turn-card URL carries no `maneuverLayout`: 1.2's `rightAligned` pinned the app's card to the SafeArea's
 right edge and the app moved the puck left of it (issue #20; on the Sport skin the card also sat
 behind the rev counter). `mibr-carplay111-nav.maneuverLayout` (`left`, `right`, `top`) adds one back.
 

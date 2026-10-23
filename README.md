@@ -51,9 +51,9 @@ CarPlay or Android Auto automatically.
 - **Parking popups no longer hide CarPlay** (front PDC view).
 - **MMI touchpad → D-pad** so drags navigate CarPlay menus (can be switched off: then
   the touchpad goes to CarPlay the stock way).
-- **AltScreen (optional, experimental).** The CarPlay map video on the cluster. With an
-  app that sends route guidance the cluster draws the maneuver itself and the phone streams
-  the bare map; with Waze the phone draws its own turn card and ETA into the cluster map.
+- **AltScreen (optional, experimental).** The CarPlay map video on the cluster. The
+  phone's turn card, ETA and speed limit each switch ON / OFF in the GEM menu (defaults:
+  turn card ON, ETA OFF, speed limit OFF).
   Status and open issues are in
   [`docs/deploy/altscreen-mhi2q.md`](docs/deploy/altscreen-mhi2q.md).
 - **Android Auto.** The Google Maps / Waze map video on the cluster (following the Large,
